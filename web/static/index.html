@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>API Proxy Admin</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        tr:hover { background-color: #f5f5f5; }
+        #details { white-space: pre-wrap; background: #f9f9f9; padding: 10px; border: 1px solid #ccc; margin-top: 20px; }
+        .timestamp { color: #555; font-size: 0.9em; }
+        .error { color: #b30000; font-weight: bold; }
+        button { padding: 6px 12px; cursor: pointer; }
+        form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; align-items: flex-end; }
+        form label { display: flex; flex-direction: column; font-size: 0.9em; }
+        form input { padding: 6px; min-width: 160px; }
+        form input[type="number"] { width: 140px; }
+        h2 { margin-top: 30px; }
+        .help-text { font-size: 0.85em; color: #666; margin-top: 4px; }
+        section { margin-bottom: 30px; }
+        .actions button { margin-right: 6px; }
+        .summary { margin-top: 10px; font-size: 0.95em; color: #444; }
+        .price-input { width: 120px; }
+    </style>
+</head>
+<body>
+<h1>Управление прокси</h1>
+
+<section>
+    <h2>Правила проксирования</h2>
+    <p>Укажите локальный путь и URL OpenAI-совместимого API, куда будут перенаправляться запросы.</p>
+    <form id="proxy-form">
+        <label>
+            Имя
+            <input type="text" id="proxy-name" placeholder="OpenAI" />
+        </label>
+        <label>
+            Локальный путь
+            <input type="text" id="proxy-path" placeholder="/openai" required />
+        </label>
+        <label>
+            Upstream URL
+            <input type="url" id="proxy-upstream" placeholder="https://api.openai.com/v1" required />
+        </label>
+        <label>
+            API Key (опционально)
+            <input type="password" id="proxy-key" placeholder="sk-..." />
+        </label>
+        <label>
+            Цена input $ / 1M
+            <input type="number" id="proxy-price-input" step="0.000001" min="0" placeholder="0.0000" />
+        </label>
+        <label>
+            Цена output $ / 1M
+            <input type="number" id="proxy-price-output" step="0.000001" min="0" placeholder="0.0000" />
+        </label>
+        <button type="submit">Добавить</button>
+        <span class="help-text">Пример: путь `/openai`, upstream `https://api.openai.com/v1`.</span>
+    </form>
+
+    <div class="summary" id="usage-summary"></div>
+
+    <table id="proxies-table">
+        <thead>
+        <tr>
+            <th>Путь</th>
+            <th>Имя</th>
+            <th>Upstream</th>
+            <th>Цена input $ / 1M</th>
+            <th>Цена output $ / 1M</th>
+            <th>Input токены</th>
+            <th>Output токены</th>
+            <th>USD input</th>
+            <th>USD output</th>
+            <th>RUB input</th>
+            <th>RUB output</th>
+            <th>Действия</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</section>
+
+<section>
+    <h2>Логи запросов</h2>
+    <p>Последние запросы, прошедшие через этот сервер.</p>
+    <label for="limit">Show last</label>
+    <input type="number" id="limit" value="50" min="1" max="500" />
+    <button id="refresh">Refresh</button>
+
+    <table id="logs-table">
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>Timestamp</th>
+            <th>Proxy</th>
+            <th>Method</th>
+            <th>Path</th>
+            <th>Status</th>
+            <th>Tokens in</th>
+            <th>Tokens out</th>
+            <th>USD in</th>
+            <th>USD out</th>
+            <th>USD total</th>
+            <th>RUB in</th>
+            <th>RUB out</th>
+            <th>RUB total</th>
+            <th>Error</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</section>
+
+<h2>Детали</h2>
+<pre id="details">Выберите запись, чтобы увидеть детали запроса и ответа.</pre>
+
+<script>
+async function loadProxies() {
+    const response = await fetch('/admin/api/proxies');
+    if (!response.ok) {
+        console.error('Failed to load proxies');
+        return;
+    }
+    const data = await response.json();
+    const tbody = document.querySelector('#proxies-table tbody');
+    tbody.innerHTML = '';
+    data.proxies.forEach(proxy => {
+        const tr = document.createElement('tr');
+        tr.dataset.proxyId = proxy.id;
+        tr.innerHTML = `
+            <td>${proxy.path_prefix}</td>
+            <td>${proxy.name || ''}</td>
+            <td>${proxy.upstream_url}</td>
+            <td>
+                <input type="number" class="price-input-in" step="0.0001" min="0" value="${proxy.token_price_input_usd || 0}" />
+            </td>
+            <td>
+                <input type="number" class="price-input-out" step="0.0001" min="0" value="${proxy.token_price_output_usd || 0}" />
+                <button class="save-price">Сохранить</button>
+            </td>
+            <td>${proxy.usage_input_tokens}</td>
+            <td>${proxy.usage_output_tokens}</td>
+            <td>${Number(proxy.usage_input_cost_usd || 0).toFixed(4)}</td>
+            <td>${Number(proxy.usage_output_cost_usd || 0).toFixed(4)}</td>
+            <td>${Number(proxy.usage_input_cost_rub || 0).toFixed(2)}</td>
+            <td>${Number(proxy.usage_output_cost_rub || 0).toFixed(2)}</td>
+            <td class="actions">
+                <button class="reset-usage">Сбросить</button>
+                <button class="delete-proxy">Удалить</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    document.querySelectorAll('.save-price').forEach(button => {
+        button.addEventListener('click', async (event) => {
+            const row = event.target.closest('tr');
+            const id = row.dataset.proxyId;
+            const inputIn = row.querySelector('.price-input-in');
+            const inputOut = row.querySelector('.price-input-out');
+            const priceIn = parseFloat(inputIn.value);
+            const priceOut = parseFloat(inputOut.value);
+            if (Number.isNaN(priceIn) || priceIn < 0 || Number.isNaN(priceOut) || priceOut < 0) {
+                alert('Некорректная цена');
+                return;
+            }
+            await updateProxyPrice(id, priceIn, priceOut);
+            await loadProxies();
+        });
+    });
+
+    document.querySelectorAll('.reset-usage').forEach(button => {
+        button.addEventListener('click', async (event) => {
+            const row = event.target.closest('tr');
+            const id = row.dataset.proxyId;
+            if (!confirm('Сбросить накопленную статистику по токенам?')) {
+                return;
+            }
+            await resetProxyUsage(id);
+            await loadProxies();
+        });
+    });
+
+    document.querySelectorAll('.delete-proxy').forEach(button => {
+        button.addEventListener('click', async (event) => {
+            const row = event.target.closest('tr');
+            const id = row.dataset.proxyId;
+            if (!confirm('Удалить прокси и связанные логи?')) {
+                return;
+            }
+            await deleteProxy(id);
+            await loadProxies();
+        });
+    });
+
+    const summary = document.getElementById('usage-summary');
+    summary.textContent = `Input: ${data.total_input_tokens} токенов, $${Number(data.total_input_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_input_cost_rub || 0).toFixed(2)}; ` +
+        `Output: ${data.total_output_tokens} токенов, $${Number(data.total_output_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_output_cost_rub || 0).toFixed(2)}`;
+}
+
+async function updateProxyPrice(id, priceIn, priceOut) {
+    const response = await fetch(`/admin/api/proxies/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            token_price_input_usd: priceIn,
+            token_price_output_usd: priceOut
+        })
+    });
+    if (!response.ok) {
+        const message = await response.text();
+        alert(`Не удалось обновить цену: ${message}`);
+    }
+}
+
+async function resetProxyUsage(id) {
+    const response = await fetch(`/admin/api/proxies/${id}/reset`, { method: 'POST' });
+    if (!response.ok) {
+        const message = await response.text();
+        alert(`Не удалось сбросить статистику: ${message}`);
+    }
+}
+
+async function deleteProxy(id) {
+    const response = await fetch(`/admin/api/proxies/${id}`, { method: 'DELETE' });
+    if (!response.ok) {
+        const message = await response.text();
+        alert(`Не удалось удалить прокси: ${message}`);
+    }
+}
+
+async function loadLogs() {
+    const limitInput = document.getElementById('limit');
+    const limit = parseInt(limitInput.value, 10) || 50;
+    const response = await fetch(`/admin/api/logs?limit=${limit}`);
+    if (!response.ok) {
+        alert('Failed to load logs');
+        return;
+    }
+    const logs = await response.json();
+    const tbody = document.querySelector('#logs-table tbody');
+    tbody.innerHTML = '';
+    logs.forEach(log => {
+        const tr = document.createElement('tr');
+        tr.addEventListener('click', () => loadDetails(log.id));
+        tr.innerHTML = `
+            <td>${log.id}</td>
+            <td class="timestamp">${new Date(log.created_at).toLocaleString()}</td>
+            <td>${log.proxy_name || log.proxy_path_prefix || ''}</td>
+            <td>${log.method}</td>
+            <td>${log.path}${log.query ? '?' + log.query : ''}</td>
+            <td>${log.response_status}</td>
+            <td>${log.request_tokens}</td>
+            <td>${log.response_tokens}</td>
+            <td>${Number(log.cost_input_usd || 0).toFixed(4)}</td>
+            <td>${Number(log.cost_output_usd || 0).toFixed(4)}</td>
+            <td>${Number(log.cost_total_usd || 0).toFixed(4)}</td>
+            <td>${Number(log.cost_input_rub || 0).toFixed(2)}</td>
+            <td>${Number(log.cost_output_rub || 0).toFixed(2)}</td>
+            <td>${Number(log.cost_total_rub || 0).toFixed(2)}</td>
+            <td class="error">${log.error_message || ''}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function loadDetails(id) {
+    const response = await fetch(`/admin/logs/${id}`);
+    if (!response.ok) {
+        alert('Failed to load log details');
+        return;
+    }
+    const log = await response.json();
+    const details = document.getElementById('details');
+    const requestBody = log.request_body !== null ? atob(log.request_body) : '';
+    const responseBody = log.response_body !== null ? atob(log.response_body) : '';
+    details.textContent = `ID: ${log.id}\nTime: ${new Date(log.created_at).toLocaleString()}\n` +
+        `Proxy: ${log.proxy_name || log.proxy_path_prefix || ''}\n` +
+        `Method: ${log.method}\nPath: ${log.path}${log.query ? '?' + log.query : ''}\n` +
+        `Status: ${log.response_status}\nError: ${log.error_message}\n` +
+        `Request tokens: ${log.request_tokens}\nResponse tokens: ${log.response_tokens}\nTotal tokens: ${log.total_tokens}\n` +
+        `Cost input: $${Number(log.cost_input_usd || 0).toFixed(4)} / ₽${Number(log.cost_input_rub || 0).toFixed(2)}\n` +
+        `Cost output: $${Number(log.cost_output_usd || 0).toFixed(4)} / ₽${Number(log.cost_output_rub || 0).toFixed(2)}\n` +
+        `Cost total: $${Number(log.cost_total_usd || 0).toFixed(4)} / ₽${Number(log.cost_total_rub || 0).toFixed(2)}\n\n` +
+        `Request Headers:\n${log.request_headers}\n` +
+        `Request Body:\n${requestBody}\n\n` +
+        `Response Headers:\n${log.response_headers}\n` +
+        `Response Body:\n${responseBody}`;
+}
+
+document.getElementById('refresh').addEventListener('click', loadLogs);
+
+document.getElementById('proxy-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const payload = {
+        name: document.getElementById('proxy-name').value,
+        path_prefix: document.getElementById('proxy-path').value,
+        upstream_url: document.getElementById('proxy-upstream').value,
+        upstream_key: document.getElementById('proxy-key').value,
+        token_price_input_usd: parseFloat(document.getElementById('proxy-price-input').value) || 0,
+        token_price_output_usd: parseFloat(document.getElementById('proxy-price-output').value) || 0,
+    };
+
+    const response = await fetch('/admin/api/proxies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        const message = await response.text();
+        alert(`Failed to add proxy: ${message}`);
+        return;
+    }
+
+    document.getElementById('proxy-key').value = '';
+    document.getElementById('proxy-price-input').value = '';
+    document.getElementById('proxy-price-output').value = '';
+    loadProxies();
+});
+
+loadProxies();
+loadLogs();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openai_proxy
+      POSTGRES_USER: openai
+      POSTGRES_PASSWORD: openai
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      APP_LISTEN_ADDR: :8080
+      DATABASE_URL: postgres://openai:openai@db:5432/openai_proxy?sslmode=disable
+      USD_RUB_RATE: "90"
+      # UPSTREAM_URL: https://api.openai.com/v1
+      # UPSTREAM_API_KEY: sk-...
+    ports:
+      - "8080:8080"
+
+volumes:
+  db-data:
