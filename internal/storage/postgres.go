@@ -49,7 +49,7 @@ func (s *Store) SaveLog(ctx context.Context, entry *models.APILog) error {
             request_tokens, response_tokens, total_tokens,
             cost_input_usd, cost_output_usd, cost_input_rub, cost_output_rub,
             cost_total_usd, cost_total_rub
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         RETURNING id, created_at`
 
 	err := s.pool.QueryRow(ctx, query,

@@ -133,6 +133,13 @@ func (s *Server) proxyHandler(rw http.ResponseWriter, req *http.Request) {
 		RequestTokens:   countTokens(body),
 	}
 
+	authHeader := req.Header.Get("Authorization")
+	if authHeader == "" {
+		log.Printf("client Authorization header missing")
+	} else {
+		log.Printf("client Authorization header provided (len=%d)", len(authHeader))
+	}
+
 	ctx := context.WithValue(req.Context(), logEntryKey{}, entry)
 
 	proxyReq := req.Clone(ctx)
@@ -537,8 +544,12 @@ func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
+		req.Host = route.target.Host
 		if route.def.UpstreamKey != "" {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", route.def.UpstreamKey))
+			log.Printf("forwarding upstream %s host=%s url=%s://%s%s (configured key len=%d)", req.Method, req.Host, req.URL.Scheme, req.URL.Host, req.URL.RequestURI(), len(route.def.UpstreamKey))
+		} else {
+			log.Printf("forwarding upstream %s host=%s url=%s://%s%s (client-supplied key len=%d)", req.Method, req.Host, req.URL.Scheme, req.URL.Host, req.URL.RequestURI(), len(req.Header.Get("Authorization")))
 		}
 	}
 
