@@ -284,6 +284,115 @@ func TestLogsAPI(t *testing.T) {
 	}
 }
 
+func TestUpdateProxy(t *testing.T) {
+	store := &fakeStore{
+		proxies: []models.Proxy{{ID: 1, Name: "Old Name", UpstreamKey: "old-key"}},
+	}
+	srv := newTestServer(t, store)
+
+	payload := map[string]interface{}{
+		"name":                   "New Name",
+		"upstream_key":           "new-key",
+		"token_price_input_usd":  0.1,
+		"token_price_output_usd": 0.2,
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPatch, "/admin/api/proxies/1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(store.updates) != 1 || store.updates[0].id != 1 {
+		t.Fatalf("update not recorded: %+v", store.updates)
+	}
+	upd := store.updates[0].upd
+	if upd.Name == nil || *upd.Name != "New Name" {
+		t.Fatalf("unexpected name update: %+v", upd)
+	}
+	if upd.UpstreamKey == nil || *upd.UpstreamKey != "new-key" {
+		t.Fatalf("unexpected key update: %+v", upd)
+	}
+	if upd.TokenPriceInputUSD == nil || *upd.TokenPriceInputUSD != 0.1 {
+		t.Fatalf("unexpected input price update: %+v", upd)
+	}
+	if upd.TokenPriceOutputUSD == nil || *upd.TokenPriceOutputUSD != 0.2 {
+		t.Fatalf("unexpected output price update: %+v", upd)
+	}
+}
+
+func TestResetProxyUsage(t *testing.T) {
+	store := &fakeStore{}
+	srv := newTestServer(t, store)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/proxies/42/reset", nil)
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(store.resetIDs) != 1 || store.resetIDs[0] != 42 {
+		t.Fatalf("reset not recorded: %+v", store.resetIDs)
+	}
+}
+
+func TestStatsAPI(t *testing.T) {
+	store := &fakeStore{}
+	srv := newTestServer(t, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/stats?period=day&limit=10", nil)
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	var stats []models.StatPoint
+	if err := json.Unmarshal(rr.Body.Bytes(), &stats); err != nil {
+		t.Fatalf("decode stats: %v", err)
+	}
+	if len(stats) != 0 {
+		t.Fatalf("expected empty stats, got %d", len(stats))
+	}
+}
+
+func TestGetLogBody(t *testing.T) {
+	store := &fakeStore{
+		logs: []models.APILog{
+			{
+				ID:   1,
+				Path: "/v1/test",
+			},
+		},
+	}
+	srv := newTestServer(t, store)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/logs/1", nil)
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+
+	var log models.APILog
+	if err := json.Unmarshal(rr.Body.Bytes(), &log); err != nil {
+		t.Fatalf("decode log: %v", err)
+	}
+	if log.ID != 1 || log.Path != "/v1/test" {
+		t.Fatalf("unexpected log: %+v", log)
+	}
+}
+
 func TestHelpers(t *testing.T) {
 	if got := normalizePathPrefix("openai/"); got != "/openai" {
 		t.Fatalf("normalizePathPrefix: expected /openai, got %s", got)
