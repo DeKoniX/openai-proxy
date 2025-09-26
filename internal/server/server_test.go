@@ -126,6 +126,11 @@ func (f *fakeStore) GetBody(ctx context.Context, id int64) (*models.APILog, erro
 	return nil, fmt.Errorf("not found")
 }
 
+func (f *fakeStore) GetStats(ctx context.Context, period string, limit int) ([]models.StatPoint, error) {
+	// Return empty stats for tests
+	return []models.StatPoint{}, nil
+}
+
 func newTestServer(t *testing.T, store *fakeStore) *Server {
 	t.Helper()
 	cfg := &config.Config{ListenAddr: ":0", USDRUBRate: 90}

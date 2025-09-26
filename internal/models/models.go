@@ -48,3 +48,12 @@ type APILog struct {
 	CostTotalUSD    float64   `json:"cost_total_usd"`
 	CostTotalRUB    float64   `json:"cost_total_rub"`
 }
+
+// StatPoint represents a data point for statistics charts.
+type StatPoint struct {
+	Time         time.Time `json:"time"`
+	RequestCount int       `json:"request_count"`
+	TotalTokens  int       `json:"total_tokens"`
+	CostTotalUSD float64   `json:"cost_total_usd"`
+	CostTotalRUB float64   `json:"cost_total_rub"`
+}

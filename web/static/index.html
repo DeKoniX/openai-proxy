@@ -7,6 +7,7 @@
     <title>API Proxy Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         #details { white-space: pre-wrap; }
         .timestamp { color: #555; font-size: 0.9em; }
@@ -117,6 +118,45 @@
     </div>
 </section>
 
+<section class="mb-4">
+    <h2 class="mb-3">Статистика</h2>
+    <p class="text-muted">Графики использования по времени.</p>
+    <div class="row g-3 mb-3">
+        <div class="col-auto">
+            <label for="stats-period" class="form-label">Период</label>
+            <select id="stats-period" class="form-control">
+                <option value="hour">По часам</option>
+                <option value="day">По дням</option>
+                <option value="week">По неделям</option>
+            </select>
+        </div>
+        <div class="col-auto">
+            <label for="stats-limit" class="form-label">Количество точек</label>
+            <input type="number" id="stats-limit" class="form-control" value="24" min="1" max="100" />
+        </div>
+        <div class="col-auto d-flex align-items-end">
+            <button id="load-stats" class="btn btn-secondary">Загрузить</button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <canvas id="requestsChart"></canvas>
+        </div>
+        <div class="col-md-6">
+            <canvas id="tokensChart"></canvas>
+        </div>
+    </div>
+    <div class="row mt-3">
+        <div class="col-md-6">
+            <canvas id="costUSDChart"></canvas>
+        </div>
+        <div class="col-md-6">
+            <canvas id="costRUBChart"></canvas>
+        </div>
+    </div>
+</section>
+
 <h2 class="mb-3">Детали</h2>
 <pre id="details" class="bg-light p-3 border rounded">Выберите запись, чтобы увидеть детали запроса и ответа.</pre>
 
@@ -144,8 +184,8 @@ async function loadProxies() {
                 <input type="number" class="form-control form-control-sm" step="0.0001" min="0" value="${proxy.token_price_output_usd || 0}" />
                 <button class="btn btn-sm btn-primary ms-2 save-price">Сохранить</button>
             </td>
-            <td>${proxy.usage_input_tokens}</td>
-            <td>${proxy.usage_output_tokens}</td>
+             <td>${formatNumber(proxy.usage_input_tokens)}</td>
+             <td>${formatNumber(proxy.usage_output_tokens)}</td>
              <td>${Number(proxy.usage_input_cost_usd || 0).toFixed(4)}</td>
              <td>${Number(proxy.usage_output_cost_usd || 0).toFixed(4)}</td>
              <td>${Number((proxy.usage_input_cost_usd || 0) + (proxy.usage_output_cost_usd || 0)).toFixed(4)}</td>
@@ -202,8 +242,8 @@ async function loadProxies() {
     });
 
     const summary = document.getElementById('usage-summary');
-    summary.innerHTML = `<strong>Общая статистика:</strong> Input: ${data.total_input_tokens} токенов, $${Number(data.total_input_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_input_cost_rub || 0).toFixed(2)}; ` +
-        `Output: ${data.total_output_tokens} токенов, $${Number(data.total_output_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_output_cost_rub || 0).toFixed(2)}`;
+    summary.innerHTML = `<strong>Общая статистика:</strong> Input: ${formatNumber(data.total_input_tokens)} токенов, $${Number(data.total_input_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_input_cost_rub || 0).toFixed(2)}; ` +
+        `Output: ${formatNumber(data.total_output_tokens)} токенов, $${Number(data.total_output_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_output_cost_rub || 0).toFixed(2)}`;
 }
 
 async function updateProxyPrice(id, priceIn, priceOut) {
@@ -258,8 +298,8 @@ async function loadLogs() {
             <td>${log.method}</td>
             <td>${log.path}${log.query ? '?' + log.query : ''}</td>
             <td>${log.response_status}</td>
-            <td>${log.request_tokens}</td>
-            <td>${log.response_tokens}</td>
+             <td>${formatNumber(log.request_tokens)}</td>
+             <td>${formatNumber(log.response_tokens)}</td>
             <td>${Number(log.cost_input_usd || 0).toFixed(4)}</td>
             <td>${Number(log.cost_output_usd || 0).toFixed(4)}</td>
             <td>${Number(log.cost_total_usd || 0).toFixed(4)}</td>
@@ -286,7 +326,7 @@ async function loadDetails(id) {
         `Proxy: ${log.proxy_name || log.proxy_path_prefix || ''}\n` +
         `Method: ${log.method}\nPath: ${log.path}${log.query ? '?' + log.query : ''}\n` +
         `Status: ${log.response_status}\nError: ${log.error_message}\n` +
-        `Request tokens: ${log.request_tokens}\nResponse tokens: ${log.response_tokens}\nTotal tokens: ${log.total_tokens}\n` +
+         `Request tokens: ${formatNumber(log.request_tokens)}\nResponse tokens: ${formatNumber(log.response_tokens)}\nTotal tokens: ${formatNumber(log.total_tokens)}\n` +
         `Cost input: $${Number(log.cost_input_usd || 0).toFixed(4)} / ₽${Number(log.cost_input_rub || 0).toFixed(2)}\n` +
         `Cost output: $${Number(log.cost_output_usd || 0).toFixed(4)} / ₽${Number(log.cost_output_rub || 0).toFixed(2)}\n` +
         `Cost total: $${Number(log.cost_total_usd || 0).toFixed(4)} / ₽${Number(log.cost_total_rub || 0).toFixed(2)}\n\n` +
@@ -301,7 +341,147 @@ function decodeBase64Utf8(base64) {
     return new TextDecoder('utf-8').decode(bytes);
 }
 
+function formatNumber(num) {
+    return new Intl.NumberFormat('ru-RU').format(num);
+}
+
+let requestsChart, tokensChart, costUSDChart, costRUBChart;
+
+async function loadStats() {
+    const period = document.getElementById('stats-period').value;
+    const limit = document.getElementById('stats-limit').value;
+
+    const response = await fetch(`/admin/api/stats?period=${period}&limit=${limit}`);
+    if (!response.ok) {
+        console.error('Failed to load stats');
+        return;
+    }
+    const stats = await response.json();
+    renderCharts(stats.reverse()); // reverse to show chronological order
+}
+
+function renderCharts(stats) {
+    const labels = stats.map(point => new Date(point.time).toLocaleString());
+
+    const requestsData = stats.map(point => point.request_count);
+    const tokensData = stats.map(point => point.total_tokens);
+    const costUSDData = stats.map(point => point.cost_total_usd);
+    const costRUBData = stats.map(point => point.cost_total_rub);
+
+    if (requestsChart) requestsChart.destroy();
+    if (tokensChart) tokensChart.destroy();
+    if (costUSDChart) costUSDChart.destroy();
+    if (costRUBChart) costRUBChart.destroy();
+
+    requestsChart = new Chart(document.getElementById('requestsChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Количество запросов',
+                data: requestsData,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Количество запросов'
+                }
+            },
+            scales: {
+                y: {
+                    ticks: {
+                        callback: function(value) {
+                            return formatNumber(value);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    tokensChart = new Chart(document.getElementById('tokensChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Всего токенов',
+                data: tokensData,
+                borderColor: 'rgb(153, 102, 255)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Использование токенов'
+                }
+            },
+            scales: {
+                y: {
+                    ticks: {
+                        callback: function(value) {
+                            return formatNumber(value);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    costUSDChart = new Chart(document.getElementById('costUSDChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Стоимость USD',
+                data: costUSDData,
+                borderColor: 'rgb(255, 205, 86)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Стоимость в USD'
+                }
+            }
+        }
+    });
+
+    costRUBChart = new Chart(document.getElementById('costRUBChart'), {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Стоимость RUB',
+                data: costRUBData,
+                borderColor: 'rgb(255, 99, 132)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Стоимость в RUB'
+                }
+            }
+        }
+    });
+}
+
 document.getElementById('refresh').addEventListener('click', loadLogs);
+document.getElementById('load-stats').addEventListener('click', loadStats);
 
 document.getElementById('proxy-form').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -334,6 +514,7 @@ document.getElementById('proxy-form').addEventListener('submit', async (event) =
 
 loadProxies();
 loadLogs();
+loadStats();
 </script>
 </body>
 </html>

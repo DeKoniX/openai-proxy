@@ -141,6 +141,64 @@ func (s *Store) ListRecent(ctx context.Context, limit int) ([]models.APILog, err
 	return logs, nil
 }
 
+// GetStats returns aggregated statistics over time periods.
+func (s *Store) GetStats(ctx context.Context, period string, limit int) ([]models.StatPoint, error) {
+	if limit <= 0 {
+		limit = 24
+	}
+
+	var groupBy string
+	switch period {
+	case "hour":
+		groupBy = "date_trunc('hour', created_at)"
+	case "day":
+		groupBy = "date_trunc('day', created_at)"
+	case "week":
+		groupBy = "date_trunc('week', created_at)"
+	default:
+		return nil, fmt.Errorf("invalid period: %s", period)
+	}
+
+	intervalStr := fmt.Sprintf("%d %s", limit, period+"s")
+	query := fmt.Sprintf(`
+		SELECT %s AS time_bucket,
+			   COUNT(*) AS request_count,
+			   SUM(total_tokens) AS total_tokens,
+			   SUM(cost_total_usd) AS cost_total_usd,
+			   SUM(cost_total_rub) AS cost_total_rub
+		FROM api_logs
+		WHERE created_at >= now() - INTERVAL '%s'
+		GROUP BY time_bucket
+		ORDER BY time_bucket DESC
+		LIMIT $1`, groupBy, intervalStr)
+
+	rows, err := s.pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("select stats: %w", err)
+	}
+	defer rows.Close()
+
+	var stats []models.StatPoint
+	for rows.Next() {
+		var point models.StatPoint
+		if err := rows.Scan(
+			&point.Time,
+			&point.RequestCount,
+			&point.TotalTokens,
+			&point.CostTotalUSD,
+			&point.CostTotalRUB,
+		); err != nil {
+			return nil, fmt.Errorf("scan stat point: %w", err)
+		}
+		stats = append(stats, point)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate stats: %w", err)
+	}
+
+	return stats, nil
+}
+
 // GetBody fetches request and response bodies for a log entry.
 func (s *Store) GetBody(ctx context.Context, id int64) (*models.APILog, error) {
 	const query = `

@@ -30,6 +30,7 @@ type Store interface {
 	SaveLog(ctx context.Context, entry *models.APILog) error
 	ListRecent(ctx context.Context, limit int) ([]models.APILog, error)
 	GetBody(ctx context.Context, id int64) (*models.APILog, error)
+	GetStats(ctx context.Context, period string, limit int) ([]models.StatPoint, error)
 	ListProxies(ctx context.Context) ([]models.Proxy, error)
 	CreateProxy(ctx context.Context, proxy *models.Proxy) error
 	UpdateProxy(ctx context.Context, id int64, upd storage.ProxyUpdate) error
@@ -92,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin/logs", s.handleLogsPage)
 	mux.HandleFunc("/admin/logs/", s.handleLogDetails)
 	mux.HandleFunc("/admin/api/logs", s.handleLogsAPI)
+	mux.HandleFunc("/admin/api/stats", s.handleStatsAPI)
 	mux.HandleFunc("/admin/api/proxies", s.handleProxiesAPI)
 	mux.HandleFunc("/admin/api/proxies/", s.handleProxyItemAPI)
 
@@ -224,6 +226,42 @@ func (s *Server) handleLogsAPI(rw http.ResponseWriter, req *http.Request) {
 
 	rw.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(rw).Encode(logs)
+}
+
+func (s *Server) handleStatsAPI(rw http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	period := req.URL.Query().Get("period")
+	if period == "" {
+		period = "hour"
+	}
+
+	limitStr := req.URL.Query().Get("limit")
+	limit := 24
+	if n := limitStr; n != "" {
+		if parsed, err := strconv.Atoi(n); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	log.Printf("stats request: period=%s limit=%d", period, limit)
+
+	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
+	defer cancel()
+
+	stats, err := s.store.GetStats(ctx, period, limit)
+	if err != nil {
+		log.Printf("failed to load stats: %v", err)
+		http.Error(rw, "failed to load stats", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("loaded %d stat points", len(stats))
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(stats)
 }
 
 func (s *Server) handleProxiesAPI(rw http.ResponseWriter, req *http.Request) {
