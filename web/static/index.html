@@ -1,190 +1,282 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>API Proxy Admin</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css"
+    />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <style>
-        #details { white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; }
-        pre { white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word; }
-        .timestamp { color: #555; font-size: 0.9em; }
-        .error { color: #b30000; font-weight: bold; }
-        .help-text { font-size: 0.85em; color: #666; margin-top: 4px; }
+      #details {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      .timestamp {
+        color: #555;
+        font-size: 0.9em;
+      }
+      .error {
+        color: #b30000;
+        font-weight: bold;
+      }
+      .help-text {
+        font-size: 0.85em;
+        color: #666;
+        margin-top: 4px;
+      }
     </style>
-</head>
-<body class="container mt-4">
-<h1 class="mb-4">Управление прокси</h1>
+  </head>
+  <body class="container mt-4">
+    <h1 class="mb-4">Управление прокси</h1>
 
-<section class="mb-4">
-    <h2 class="mb-3">Правила проксирования</h2>
-    <p class="text-muted">Укажите локальный путь и URL OpenAI-совместимого API, куда будут перенаправляться запросы.</p>
-    <form id="proxy-form" class="row g-3 mb-3">
+    <section class="mb-4">
+      <h2 class="mb-3">Правила проксирования</h2>
+      <p class="text-muted">
+        Укажите локальный путь и URL OpenAI-совместимого API, куда будут
+        перенаправляться запросы.
+      </p>
+      <form id="proxy-form" class="row g-3 mb-3">
         <div class="col-md-6">
-            <label for="proxy-name" class="form-label">Имя</label>
-            <input type="text" id="proxy-name" class="form-control" placeholder="OpenAI" />
+          <label for="proxy-name" class="form-label">Имя</label>
+          <input
+            type="text"
+            id="proxy-name"
+            class="form-control"
+            placeholder="OpenAI"
+          />
         </div>
         <div class="col-md-6">
-            <label for="proxy-path" class="form-label">Локальный путь</label>
-            <input type="text" id="proxy-path" class="form-control" placeholder="/openai" required />
+          <label for="proxy-path" class="form-label">Локальный путь</label>
+          <input
+            type="text"
+            id="proxy-path"
+            class="form-control"
+            placeholder="/openai"
+            required
+          />
         </div>
         <div class="col-md-6">
-            <label for="proxy-upstream" class="form-label">Upstream URL</label>
-            <input type="url" id="proxy-upstream" class="form-control" placeholder="https://api.openai.com/v1" required />
+          <label for="proxy-upstream" class="form-label">Upstream URL</label>
+          <input
+            type="url"
+            id="proxy-upstream"
+            class="form-control"
+            placeholder="https://api.openai.com/v1"
+            required
+          />
         </div>
         <div class="col-md-6">
-            <label for="proxy-key" class="form-label">API Key (опционально)</label>
-            <input type="password" id="proxy-key" class="form-control" placeholder="sk-..." />
+          <label for="proxy-key" class="form-label"
+            >API Key (опционально)</label
+          >
+          <input
+            type="password"
+            id="proxy-key"
+            class="form-control"
+            placeholder="sk-..."
+          />
         </div>
         <div class="col-md-4">
-            <label for="proxy-price-input" class="form-label">Цена input $ / 1M</label>
-            <input type="number" id="proxy-price-input" class="form-control" step="0.000001" min="0" placeholder="0.0000" />
+          <label for="proxy-price-input" class="form-label"
+            >Цена input $ / 1M</label
+          >
+          <input
+            type="number"
+            id="proxy-price-input"
+            class="form-control"
+            step="0.000001"
+            min="0"
+            placeholder="0.0000"
+          />
         </div>
         <div class="col-md-4">
-            <label for="proxy-price-output" class="form-label">Цена output $ / 1M</label>
-            <input type="number" id="proxy-price-output" class="form-control" step="0.000001" min="0" placeholder="0.0000" />
+          <label for="proxy-price-output" class="form-label"
+            >Цена output $ / 1M</label
+          >
+          <input
+            type="number"
+            id="proxy-price-output"
+            class="form-control"
+            step="0.000001"
+            min="0"
+            placeholder="0.0000"
+          />
         </div>
         <div class="col-md-4 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary me-3">Добавить</button>
-            <span class="help-text">Пример: путь `/openai`, upstream `https://api.openai.com/v1`.</span>
+          <button type="submit" class="btn btn-primary me-3">Добавить</button>
+          <span class="help-text"
+            >Пример: путь `/openai`, upstream `https://api.openai.com/v1`.</span
+          >
         </div>
-    </form>
+      </form>
 
-    <div class="alert alert-info" id="usage-summary"></div>
+      <div class="alert alert-info" id="usage-summary"></div>
 
-    <div class="table-responsive">
+      <div class="table-responsive">
         <table id="proxies-table" class="table table-striped table-hover">
-            <thead class="table-dark">
+          <thead class="table-dark">
             <tr>
-                <th>Путь</th>
-                <th>Имя</th>
-                <th>Upstream</th>
-                <th>Цена input $ / 1M</th>
-                <th>Цена output $ / 1M</th>
-                <th>Input токены</th>
-                <th>Output токены</th>
-                <th>USD input</th>
-                <th>USD output</th>
-                <th>USD total</th>
-                <th>RUB input</th>
-                <th>RUB output</th>
-                <th>RUB total</th>
-                <th>Действия</th>
+              <th>Путь</th>
+              <th>Имя</th>
+              <th>Upstream</th>
+              <th>API Key</th>
+              <th>Цена input $ / 1M</th>
+              <th>Цена output $ / 1M</th>
+              <th>Input токены</th>
+              <th>Output токены</th>
+              <th>USD input</th>
+              <th>USD output</th>
+              <th>USD total</th>
+              <th>RUB input</th>
+              <th>RUB output</th>
+              <th>RUB total</th>
+              <th>Действия</th>
             </tr>
-            </thead>
-            <tbody></tbody>
+          </thead>
+          <tbody></tbody>
         </table>
-    </div>
-</section>
+      </div>
+    </section>
 
-<section class="mb-4">
-    <h2 class="mb-3">Логи запросов</h2>
-    <p class="text-muted">Последние запросы, прошедшие через этот сервер.</p>
-    <div class="row g-3 mb-3">
+    <section class="mb-4">
+      <h2 class="mb-3">Логи запросов</h2>
+      <p class="text-muted">Последние запросы, прошедшие через этот сервер.</p>
+      <div class="row g-3 mb-3">
         <div class="col-auto">
-            <label for="limit" class="form-label">Show last</label>
-            <input type="number" id="limit" class="form-control" value="50" min="1" max="500" />
+          <label for="limit" class="form-label">Show last</label>
+          <input
+            type="number"
+            id="limit"
+            class="form-control"
+            value="10"
+            min="1"
+            max="500"
+          />
         </div>
         <div class="col-auto d-flex align-items-end">
-            <button id="refresh" class="btn btn-secondary">Refresh</button>
+          <button id="refresh" class="btn btn-secondary">Refresh</button>
         </div>
-    </div>
+      </div>
 
-    <div class="table-responsive">
+      <div class="table-responsive">
         <table id="logs-table" class="table table-striped table-hover">
-            <thead class="table-dark">
+          <thead class="table-dark">
             <tr>
-                <th>ID</th>
-                <th>Timestamp</th>
-                <th>Proxy</th>
-                <th>Method</th>
-                <th>Path</th>
-                <th>Status</th>
-                <th>Tokens in</th>
-                <th>Tokens out</th>
-                <th>USD in</th>
-                <th>USD out</th>
-                <th>USD total</th>
-                <th>RUB in</th>
-                <th>RUB out</th>
-                <th>RUB total</th>
-                <th>Error</th>
+              <th>ID</th>
+              <th>Timestamp</th>
+              <th>Proxy</th>
+              <th>Method</th>
+              <th>Path</th>
+              <th>Status</th>
+              <th>Tokens in</th>
+              <th>Tokens out</th>
+              <th>USD in</th>
+              <th>USD out</th>
+              <th>USD total</th>
+              <th>RUB in</th>
+              <th>RUB out</th>
+              <th>RUB total</th>
+              <th>Error</th>
             </tr>
-            </thead>
-            <tbody></tbody>
+          </thead>
+          <tbody></tbody>
         </table>
-    </div>
-</section>
+      </div>
+    </section>
 
-<section class="mb-4">
-    <h2 class="mb-3">Статистика</h2>
-    <p class="text-muted">Графики использования по времени.</p>
-    <div class="row g-3 mb-3">
+    <section class="mb-4">
+      <h2 class="mb-3">Статистика</h2>
+      <p class="text-muted">Графики использования по времени.</p>
+      <div class="row g-3 mb-3">
         <div class="col-auto">
-            <label for="stats-period" class="form-label">Период</label>
-            <select id="stats-period" class="form-control">
-                <option value="hour">По часам</option>
-                <option value="day">По дням</option>
-                <option value="week">По неделям</option>
-            </select>
+          <label for="stats-period" class="form-label">Период</label>
+          <select id="stats-period" class="form-control">
+            <option value="hour">По часам</option>
+            <option value="day">По дням</option>
+            <option value="week">По неделям</option>
+          </select>
         </div>
         <div class="col-auto">
-            <label for="stats-limit" class="form-label">Количество точек</label>
-            <input type="number" id="stats-limit" class="form-control" value="24" min="1" max="100" />
+          <label for="stats-limit" class="form-label">Количество точек</label>
+          <input
+            type="number"
+            id="stats-limit"
+            class="form-control"
+            value="24"
+            min="1"
+            max="100"
+          />
         </div>
         <div class="col-auto d-flex align-items-end">
-            <button id="load-stats" class="btn btn-secondary">Загрузить</button>
+          <button id="load-stats" class="btn btn-secondary">Загрузить</button>
         </div>
-    </div>
+      </div>
 
-    <div class="row">
+      <div class="row">
         <div class="col-md-6">
-            <canvas id="requestsChart"></canvas>
+          <canvas id="requestsChart"></canvas>
         </div>
         <div class="col-md-6">
-            <canvas id="tokensChart"></canvas>
+          <canvas id="tokensChart"></canvas>
         </div>
-    </div>
-    <div class="row mt-3">
+      </div>
+      <div class="row mt-3">
         <div class="col-md-6">
-            <canvas id="costUSDChart"></canvas>
+          <canvas id="costUSDChart"></canvas>
         </div>
         <div class="col-md-6">
-            <canvas id="costRUBChart"></canvas>
+          <canvas id="costRUBChart"></canvas>
         </div>
-    </div>
-</section>
+      </div>
+    </section>
 
-<h2 class="mb-3">Детали</h2>
-<pre id="details" class="bg-light p-3 border rounded">Выберите запись, чтобы увидеть детали запроса и ответа.</pre>
+    <h2 class="mb-3">Детали</h2>
+    <pre id="details" class="bg-light p-3 border rounded">
+Выберите запись, чтобы увидеть детали запроса и ответа.</pre
+    >
 
-<script>
-async function loadProxies() {
-    const response = await fetch('/admin/api/proxies');
-    if (!response.ok) {
-        console.error('Failed to load proxies');
-        return;
-    }
-    const data = await response.json();
-    const tbody = document.querySelector('#proxies-table tbody');
-    tbody.innerHTML = '';
-    data.proxies.forEach(proxy => {
-        const tr = document.createElement('tr');
-        tr.dataset.proxyId = proxy.id;
-        tr.innerHTML = `
+    <script>
+      async function loadProxies() {
+        const response = await fetch("/admin/api/proxies");
+        if (!response.ok) {
+          console.error("Failed to load proxies");
+          return;
+        }
+        const data = await response.json();
+        const tbody = document.querySelector("#proxies-table tbody");
+        tbody.innerHTML = "";
+        data.proxies.forEach((proxy) => {
+          const tr = document.createElement("tr");
+          tr.dataset.proxyId = proxy.id;
+          tr.innerHTML = `
             <td>${proxy.path_prefix}</td>
-            <td>${proxy.name || ''}</td>
+            <td>${proxy.name || ""}</td>
             <td>${proxy.upstream_url}</td>
             <td>
-                <input type="number" class="form-control form-control-sm" step="0.0001" min="0" value="${proxy.token_price_input_usd || 0}" />
+                <input type="password" class="form-control form-control-sm key-input" placeholder="Новый API Key" />
+                <button class="btn btn-sm btn-secondary ms-2 save-key">Сохранить Key</button>
             </td>
             <td>
-                <input type="number" class="form-control form-control-sm" step="0.0001" min="0" value="${proxy.token_price_output_usd || 0}" />
+                <input type="number" class="form-control form-control-sm price-input-in" step="0.0001" min="0" value="${proxy.token_price_input_usd || 0}" />
+            </td>
+            <td>
+                <input type="number" class="form-control form-control-sm price-input-out" step="0.0001" min="0" value="${proxy.token_price_output_usd || 0}" />
                 <button class="btn btn-sm btn-primary ms-2 save-price">Сохранить</button>
             </td>
              <td>${formatNumber(proxy.usage_input_tokens)}</td>
@@ -200,106 +292,141 @@ async function loadProxies() {
                 <button class="btn btn-sm btn-danger delete-proxy">Удалить</button>
             </td>
         `;
-        tbody.appendChild(tr);
-    });
+          tbody.appendChild(tr);
+        });
 
-    document.querySelectorAll('.save-price').forEach(button => {
-        button.addEventListener('click', async (event) => {
-            const row = event.target.closest('tr');
+        document.querySelectorAll(".save-price").forEach((button) => {
+          button.addEventListener("click", async (event) => {
+            const row = event.target.closest("tr");
             const id = row.dataset.proxyId;
-            const inputIn = row.querySelector('.price-input-in');
-            const inputOut = row.querySelector('.price-input-out');
+            const inputIn = row.querySelector(".price-input-in");
+            const inputOut = row.querySelector(".price-input-out");
             const priceIn = parseFloat(inputIn.value);
             const priceOut = parseFloat(inputOut.value);
-            if (Number.isNaN(priceIn) || priceIn < 0 || Number.isNaN(priceOut) || priceOut < 0) {
-                alert('Некорректная цена');
-                return;
+            if (
+              Number.isNaN(priceIn) ||
+              priceIn < 0 ||
+              Number.isNaN(priceOut) ||
+              priceOut < 0
+            ) {
+              alert("Некорректная цена");
+              return;
             }
             await updateProxyPrice(id, priceIn, priceOut);
             await loadProxies();
+          });
         });
-    });
 
-    document.querySelectorAll('.reset-usage').forEach(button => {
-        button.addEventListener('click', async (event) => {
-            const row = event.target.closest('tr');
+        document.querySelectorAll(".save-key").forEach((button) => {
+          button.addEventListener("click", async (event) => {
+            const row = event.target.closest("tr");
             const id = row.dataset.proxyId;
-            if (!confirm('Сбросить накопленную статистику по токенам?')) {
-                return;
+            const keyInput = row.querySelector(".key-input");
+            const key = keyInput.value;
+            await updateProxyKey(id, key);
+            keyInput.value = "";
+          });
+        });
+
+        document.querySelectorAll(".reset-usage").forEach((button) => {
+          button.addEventListener("click", async (event) => {
+            const row = event.target.closest("tr");
+            const id = row.dataset.proxyId;
+            if (!confirm("Сбросить накопленную статистику по токенам?")) {
+              return;
             }
             await resetProxyUsage(id);
             await loadProxies();
+          });
         });
-    });
 
-    document.querySelectorAll('.delete-proxy').forEach(button => {
-        button.addEventListener('click', async (event) => {
-            const row = event.target.closest('tr');
+        document.querySelectorAll(".delete-proxy").forEach((button) => {
+          button.addEventListener("click", async (event) => {
+            const row = event.target.closest("tr");
             const id = row.dataset.proxyId;
-            if (!confirm('Удалить прокси и связанные логи?')) {
-                return;
+            if (!confirm("Удалить прокси и связанные логи?")) {
+              return;
             }
             await deleteProxy(id);
             await loadProxies();
+          });
         });
-    });
 
-    const summary = document.getElementById('usage-summary');
-    summary.innerHTML = `<strong>Общая статистика:</strong> Input: ${formatNumber(data.total_input_tokens)} токенов, $${Number(data.total_input_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_input_cost_rub || 0).toFixed(2)}; ` +
-        `Output: ${formatNumber(data.total_output_tokens)} токенов, $${Number(data.total_output_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_output_cost_rub || 0).toFixed(2)}`;
-}
+        const summary = document.getElementById("usage-summary");
+        summary.innerHTML =
+          `<strong>Общая статистика:</strong> Input: ${formatNumber(data.total_input_tokens)} токенов, $${Number(data.total_input_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_input_cost_rub || 0).toFixed(2)}; ` +
+          `Output: ${formatNumber(data.total_output_tokens)} токенов, $${Number(data.total_output_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_output_cost_rub || 0).toFixed(2)}`;
+      }
 
-async function updateProxyPrice(id, priceIn, priceOut) {
-    const response = await fetch(`/admin/api/proxies/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      async function updateProxyPrice(id, priceIn, priceOut) {
+        const response = await fetch(`/admin/api/proxies/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             token_price_input_usd: priceIn,
-            token_price_output_usd: priceOut
-        })
-    });
-    if (!response.ok) {
-        const message = await response.text();
-        alert(`Не удалось обновить цену: ${message}`);
-    }
-}
+            token_price_output_usd: priceOut,
+          }),
+        });
+        if (!response.ok) {
+          const message = await response.text();
+          alert(`Не удалось обновить цену: ${message}`);
+        }
+      }
 
-async function resetProxyUsage(id) {
-    const response = await fetch(`/admin/api/proxies/${id}/reset`, { method: 'POST' });
-    if (!response.ok) {
-        const message = await response.text();
-        alert(`Не удалось сбросить статистику: ${message}`);
-    }
-}
+      async function updateProxyKey(id, key) {
+        const response = await fetch(`/admin/api/proxies/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            upstream_key: key,
+          }),
+        });
+        if (!response.ok) {
+          const message = await response.text();
+          alert(`Не удалось обновить API Key: ${message}`);
+        }
+      }
 
-async function deleteProxy(id) {
-    const response = await fetch(`/admin/api/proxies/${id}`, { method: 'DELETE' });
-    if (!response.ok) {
-        const message = await response.text();
-        alert(`Не удалось удалить прокси: ${message}`);
-    }
-}
+      async function resetProxyUsage(id) {
+        const response = await fetch(`/admin/api/proxies/${id}/reset`, {
+          method: "POST",
+        });
+        if (!response.ok) {
+          const message = await response.text();
+          alert(`Не удалось сбросить статистику: ${message}`);
+        }
+      }
 
-async function loadLogs() {
-    const limitInput = document.getElementById('limit');
-    const limit = parseInt(limitInput.value, 10) || 50;
-    const response = await fetch(`/admin/api/logs?limit=${limit}`);
-    if (!response.ok) {
-        alert('Failed to load logs');
-        return;
-    }
-    const logs = await response.json();
-    const tbody = document.querySelector('#logs-table tbody');
-    tbody.innerHTML = '';
-    logs.forEach(log => {
-        const tr = document.createElement('tr');
-        tr.addEventListener('click', () => loadDetails(log.id));
-        tr.innerHTML = `
+      async function deleteProxy(id) {
+        const response = await fetch(`/admin/api/proxies/${id}`, {
+          method: "DELETE",
+        });
+        if (!response.ok) {
+          const message = await response.text();
+          alert(`Не удалось удалить прокси: ${message}`);
+        }
+      }
+
+      async function loadLogs() {
+        const limitInput = document.getElementById("limit");
+        const limit = parseInt(limitInput.value, 10) || 50;
+        const response = await fetch(`/admin/api/logs?limit=${limit}`);
+        if (!response.ok) {
+          alert("Failed to load logs");
+          return;
+        }
+        const logs = await response.json();
+        const tbody = document.querySelector("#logs-table tbody");
+        tbody.innerHTML = "";
+        logs.forEach((log) => {
+          const tr = document.createElement("tr");
+          tr.addEventListener("click", () => loadDetails(log.id));
+          tr.innerHTML = `
             <td>${log.id}</td>
             <td class="timestamp">${new Date(log.created_at).toLocaleString()}</td>
-            <td>${log.proxy_name || log.proxy_path_prefix || ''}</td>
+            <td>${log.proxy_name || log.proxy_path_prefix || ""}</td>
             <td>${log.method}</td>
-            <td>${log.path}${log.query ? '?' + log.query : ''}</td>
+            <td>${log.path}${log.query ? "?" + log.query : ""}</td>
             <td>${log.response_status}</td>
              <td>${formatNumber(log.request_tokens)}</td>
              <td>${formatNumber(log.response_tokens)}</td>
@@ -309,214 +436,240 @@ async function loadLogs() {
             <td>${Number(log.cost_input_rub || 0).toFixed(2)}</td>
             <td>${Number(log.cost_output_rub || 0).toFixed(2)}</td>
             <td>${Number(log.cost_total_rub || 0).toFixed(2)}</td>
-            <td class="error">${log.error_message || ''}</td>
+            <td class="error">${log.error_message || ""}</td>
         `;
-        tbody.appendChild(tr);
-    });
-}
+          tbody.appendChild(tr);
+        });
+      }
 
-async function loadDetails(id) {
-    const response = await fetch(`/admin/logs/${id}`);
-    if (!response.ok) {
-        alert('Failed to load log details');
-        return;
-    }
-    const log = await response.json();
-    const details = document.getElementById('details');
-    const requestBody = log.request_body !== null ? formatJSON(decodeBase64Utf8(log.request_body)) : '';
-    const responseBody = log.response_body !== null ? formatJSON(decodeBase64Utf8(log.response_body)) : '';
-    details.innerHTML = `<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#request" type="button" role="tab" aria-selected="true">Request</button></li><li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#response" type="button" role="tab" aria-selected="false">Response</button></li></ul><div class="tab-content mt-3"><div class="tab-pane fade show active" id="request" role="tabpanel">ID: ${log.id}<br>Time: ${new Date(log.created_at).toLocaleString()}<br>Proxy: ${log.proxy_name || log.proxy_path_prefix || ''}<br>Method: ${log.method}<br>Path: ${log.path}${log.query ? '?' + log.query : ''}<br>Request tokens: ${formatNumber(log.request_tokens)}<br>Cost input: $${Number(log.cost_input_usd || 0).toFixed(4)} / ₽${Number(log.cost_input_rub || 0).toFixed(2)}<br><br>Request Headers:<br>${log.request_headers.replace(/\n/g, '<br>')}<br><br>Request Body:<br><pre><code class="language-json">${requestBody}</code></pre></div><div class="tab-pane fade" id="response" role="tabpanel">Status: ${log.response_status}<br>Error: ${log.error_message}<br>Response tokens: ${formatNumber(log.response_tokens)}<br>Total tokens: ${formatNumber(log.total_tokens)}<br>Cost output: $${Number(log.cost_output_usd || 0).toFixed(4)} / ₽${Number(log.cost_output_rub || 0).toFixed(2)}<br>Cost total: $${Number(log.cost_total_usd || 0).toFixed(4)} / ₽${Number(log.cost_total_rub || 0).toFixed(2)}<br><br>Response Headers:<br>${log.response_headers.replace(/\n/g, '<br>')}<br><br>Response Body:<br><pre><code class="language-json">${responseBody}</code></pre></div></div>`;
-    hljs.highlightAll();
-}
+      async function loadDetails(id) {
+        const response = await fetch(`/admin/logs/${id}`);
+        if (!response.ok) {
+          alert("Failed to load log details");
+          return;
+        }
+        const log = await response.json();
+        const details = document.getElementById("details");
+        const requestBody =
+          log.request_body !== null
+            ? formatJSON(decodeBase64Utf8(log.request_body))
+            : "";
+        const responseBody =
+          log.response_body !== null
+            ? formatJSON(decodeBase64Utf8(log.response_body))
+            : "";
+        details.innerHTML = `<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#request" type="button" role="tab" aria-selected="true">Request</button></li><li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#response" type="button" role="tab" aria-selected="false">Response</button></li></ul><div class="tab-content mt-3"><div class="tab-pane fade show active" id="request" role="tabpanel">ID: ${log.id}<br>Time: ${new Date(log.created_at).toLocaleString()}<br>Proxy: ${log.proxy_name || log.proxy_path_prefix || ""}<br>Method: ${log.method}<br>Path: ${log.path}${log.query ? "?" + log.query : ""}<br>Request tokens: ${formatNumber(log.request_tokens)}<br>Cost input: $${Number(log.cost_input_usd || 0).toFixed(4)} / ₽${Number(log.cost_input_rub || 0).toFixed(2)}<br><br>Request Headers:<br>${log.request_headers.replace(/\n/g, "<br>")}<br><br>Request Body:<br><pre><code class="language-json">${requestBody}</code></pre></div><div class="tab-pane fade" id="response" role="tabpanel">Status: ${log.response_status}<br>Error: ${log.error_message}<br>Response tokens: ${formatNumber(log.response_tokens)}<br>Total tokens: ${formatNumber(log.total_tokens)}<br>Cost output: $${Number(log.cost_output_usd || 0).toFixed(4)} / ₽${Number(log.cost_output_rub || 0).toFixed(2)}<br>Cost total: $${Number(log.cost_total_usd || 0).toFixed(4)} / ₽${Number(log.cost_total_rub || 0).toFixed(2)}<br><br>Response Headers:<br>${log.response_headers.replace(/\n/g, "<br>")}<br><br>Response Body:<br><pre><code class="language-json">${responseBody}</code></pre></div></div>`;
+        hljs.highlightAll();
+      }
 
-function decodeBase64Utf8(base64) {
-    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-    return new TextDecoder('utf-8').decode(bytes);
-}
+      function decodeBase64Utf8(base64) {
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+        return new TextDecoder("utf-8").decode(bytes);
+      }
 
-function formatJSON(text) {
-    try {
-        const parsed = JSON.parse(text);
-        return JSON.stringify(parsed, null, 2);
-    } catch (e) {
-        return text; // Если не JSON, вернуть как есть
-    }
-}
+      function formatJSON(text) {
+        try {
+          const parsed = JSON.parse(text);
+          return JSON.stringify(parsed, null, 2);
+        } catch (e) {
+          return text; // Если не JSON, вернуть как есть
+        }
+      }
 
-function formatNumber(num) {
-    return new Intl.NumberFormat('ru-RU').format(num);
-}
+      function formatNumber(num) {
+        return new Intl.NumberFormat("ru-RU").format(num);
+      }
 
-let requestsChart, tokensChart, costUSDChart, costRUBChart;
+      let requestsChart, tokensChart, costUSDChart, costRUBChart;
 
-async function loadStats() {
-    const period = document.getElementById('stats-period').value;
-    const limit = document.getElementById('stats-limit').value;
+      async function loadStats() {
+        const period = document.getElementById("stats-period").value;
+        const limit = document.getElementById("stats-limit").value;
 
-    const response = await fetch(`/admin/api/stats?period=${period}&limit=${limit}`);
-    if (!response.ok) {
-        console.error('Failed to load stats');
-        return;
-    }
-    const stats = await response.json();
-    renderCharts(stats.reverse()); // reverse to show chronological order
-}
+        const response = await fetch(
+          `/admin/api/stats?period=${period}&limit=${limit}`,
+        );
+        if (!response.ok) {
+          console.error("Failed to load stats");
+          return;
+        }
+        const stats = await response.json();
+        renderCharts(stats.reverse()); // reverse to show chronological order
+      }
 
-function renderCharts(stats) {
-    const labels = stats.map(point => new Date(point.time).toLocaleString());
+      function renderCharts(stats) {
+        const labels = stats.map((point) =>
+          new Date(point.time).toLocaleString(),
+        );
 
-    const requestsData = stats.map(point => point.request_count);
-    const tokensData = stats.map(point => point.total_tokens);
-    const costUSDData = stats.map(point => point.cost_total_usd);
-    const costRUBData = stats.map(point => point.cost_total_rub);
+        const requestsData = stats.map((point) => point.request_count);
+        const tokensData = stats.map((point) => point.total_tokens);
+        const costUSDData = stats.map((point) => point.cost_total_usd);
+        const costRUBData = stats.map((point) => point.cost_total_rub);
 
-    if (requestsChart) requestsChart.destroy();
-    if (tokensChart) tokensChart.destroy();
-    if (costUSDChart) costUSDChart.destroy();
-    if (costRUBChart) costRUBChart.destroy();
+        if (requestsChart) requestsChart.destroy();
+        if (tokensChart) tokensChart.destroy();
+        if (costUSDChart) costUSDChart.destroy();
+        if (costRUBChart) costRUBChart.destroy();
 
-    requestsChart = new Chart(document.getElementById('requestsChart'), {
-        type: 'line',
-        data: {
+        requestsChart = new Chart(document.getElementById("requestsChart"), {
+          type: "line",
+          data: {
             labels: labels,
-            datasets: [{
-                label: 'Количество запросов',
+            datasets: [
+              {
+                label: "Количество запросов",
                 data: requestsData,
-                borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1
-            }]
-        },
-        options: {
+                borderColor: "rgb(75, 192, 192)",
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
             responsive: true,
             plugins: {
-                title: {
-                    display: true,
-                    text: 'Количество запросов'
-                }
+              title: {
+                display: true,
+                text: "Количество запросов",
+              },
             },
             scales: {
-                y: {
-                    ticks: {
-                        callback: function(value) {
-                            return formatNumber(value);
-                        }
-                    }
-                }
-            }
-        }
-    });
+              y: {
+                ticks: {
+                  callback: function (value) {
+                    return formatNumber(value);
+                  },
+                },
+              },
+            },
+          },
+        });
 
-    tokensChart = new Chart(document.getElementById('tokensChart'), {
-        type: 'line',
-        data: {
+        tokensChart = new Chart(document.getElementById("tokensChart"), {
+          type: "line",
+          data: {
             labels: labels,
-            datasets: [{
-                label: 'Всего токенов',
+            datasets: [
+              {
+                label: "Всего токенов",
                 data: tokensData,
-                borderColor: 'rgb(153, 102, 255)',
-                tension: 0.1
-            }]
-        },
-        options: {
+                borderColor: "rgb(153, 102, 255)",
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
             responsive: true,
             plugins: {
-                title: {
-                    display: true,
-                    text: 'Использование токенов'
-                }
+              title: {
+                display: true,
+                text: "Использование токенов",
+              },
             },
             scales: {
-                y: {
-                    ticks: {
-                        callback: function(value) {
-                            return formatNumber(value);
-                        }
-                    }
-                }
-            }
-        }
-    });
+              y: {
+                ticks: {
+                  callback: function (value) {
+                    return formatNumber(value);
+                  },
+                },
+              },
+            },
+          },
+        });
 
-    costUSDChart = new Chart(document.getElementById('costUSDChart'), {
-        type: 'line',
-        data: {
+        costUSDChart = new Chart(document.getElementById("costUSDChart"), {
+          type: "line",
+          data: {
             labels: labels,
-            datasets: [{
-                label: 'Стоимость USD',
+            datasets: [
+              {
+                label: "Стоимость USD",
                 data: costUSDData,
-                borderColor: 'rgb(255, 205, 86)',
-                tension: 0.1
-            }]
-        },
-        options: {
+                borderColor: "rgb(255, 205, 86)",
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
             responsive: true,
             plugins: {
-                title: {
-                    display: true,
-                    text: 'Стоимость в USD'
-                }
-            }
-        }
-    });
+              title: {
+                display: true,
+                text: "Стоимость в USD",
+              },
+            },
+          },
+        });
 
-    costRUBChart = new Chart(document.getElementById('costRUBChart'), {
-        type: 'line',
-        data: {
+        costRUBChart = new Chart(document.getElementById("costRUBChart"), {
+          type: "line",
+          data: {
             labels: labels,
-            datasets: [{
-                label: 'Стоимость RUB',
+            datasets: [
+              {
+                label: "Стоимость RUB",
                 data: costRUBData,
-                borderColor: 'rgb(255, 99, 132)',
-                tension: 0.1
-            }]
-        },
-        options: {
+                borderColor: "rgb(255, 99, 132)",
+                tension: 0.1,
+              },
+            ],
+          },
+          options: {
             responsive: true,
             plugins: {
-                title: {
-                    display: true,
-                    text: 'Стоимость в RUB'
-                }
-            }
-        }
-    });
-}
+              title: {
+                display: true,
+                text: "Стоимость в RUB",
+              },
+            },
+          },
+        });
+      }
 
-document.getElementById('refresh').addEventListener('click', loadLogs);
-document.getElementById('load-stats').addEventListener('click', loadStats);
+      document.getElementById("refresh").addEventListener("click", loadLogs);
+      document
+        .getElementById("load-stats")
+        .addEventListener("click", loadStats);
 
-document.getElementById('proxy-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const payload = {
-        name: document.getElementById('proxy-name').value,
-        path_prefix: document.getElementById('proxy-path').value,
-        upstream_url: document.getElementById('proxy-upstream').value,
-        upstream_key: document.getElementById('proxy-key').value,
-        token_price_input_usd: parseFloat(document.getElementById('proxy-price-input').value) || 0,
-        token_price_output_usd: parseFloat(document.getElementById('proxy-price-output').value) || 0,
-    };
+      document
+        .getElementById("proxy-form")
+        .addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const payload = {
+            name: document.getElementById("proxy-name").value,
+            path_prefix: document.getElementById("proxy-path").value,
+            upstream_url: document.getElementById("proxy-upstream").value,
+            upstream_key: document.getElementById("proxy-key").value,
+            token_price_input_usd:
+              parseFloat(document.getElementById("proxy-price-input").value) ||
+              0,
+            token_price_output_usd:
+              parseFloat(document.getElementById("proxy-price-output").value) ||
+              0,
+          };
 
-    const response = await fetch('/admin/api/proxies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-    });
+          const response = await fetch("/admin/api/proxies", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
-    if (!response.ok) {
-        const message = await response.text();
-        alert(`Failed to add proxy: ${message}`);
-        return;
-    }
+          if (!response.ok) {
+            const message = await response.text();
+            alert(`Failed to add proxy: ${message}`);
+            return;
+          }
 
-    document.getElementById('proxy-key').value = '';
-    document.getElementById('proxy-price-input').value = '';
-    document.getElementById('proxy-price-output').value = '';
-    loadProxies();
-});
+          document.getElementById("proxy-key").value = "";
+          document.getElementById("proxy-price-input").value = "";
+          document.getElementById("proxy-price-output").value = "";
+          loadProxies();
+        });
 
-loadProxies();
-loadLogs();
-loadStats();
-</script>
-</body>
+      loadProxies();
+      loadLogs();
+      loadStats();
+    </script>
+  </body>
 </html>
