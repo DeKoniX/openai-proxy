@@ -15,6 +15,7 @@
 - Check formatting: `gofmt -d .`
 - Vet for issues: `go vet ./...`
 - Advanced linting: `staticcheck ./...`
+- Comprehensive linting: `golangci-lint run`
 
 ## Code Style Guidelines
 
