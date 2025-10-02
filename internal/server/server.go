@@ -199,7 +199,10 @@ func (s *Server) handleLogDetails(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(entry)
+	if err := json.NewEncoder(rw).Encode(entry); err != nil {
+		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) handleLogsAPI(rw http.ResponseWriter, req *http.Request) {
@@ -225,7 +228,10 @@ func (s *Server) handleLogsAPI(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(logs)
+	if err := json.NewEncoder(rw).Encode(logs); err != nil {
+		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) handleStatsAPI(rw http.ResponseWriter, req *http.Request) {
@@ -261,7 +267,10 @@ func (s *Server) handleStatsAPI(rw http.ResponseWriter, req *http.Request) {
 
 	log.Printf("loaded %d stat points", len(stats))
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(stats)
+	if err := json.NewEncoder(rw).Encode(stats); err != nil {
+		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) handleProxiesAPI(rw http.ResponseWriter, req *http.Request) {
@@ -359,7 +368,10 @@ func (s *Server) listProxies(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(response)
+	if err := json.NewEncoder(rw).Encode(response); err != nil {
+		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) createProxy(rw http.ResponseWriter, req *http.Request) {
@@ -428,7 +440,10 @@ func (s *Server) createProxy(rw http.ResponseWriter, req *http.Request) {
 
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusCreated)
-	json.NewEncoder(rw).Encode(proxy)
+	if err := json.NewEncoder(rw).Encode(proxy); err != nil {
+		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) updateProxy(rw http.ResponseWriter, req *http.Request, id int64) {
@@ -472,7 +487,10 @@ func (s *Server) updateProxy(rw http.ResponseWriter, req *http.Request, id int64
 	log.Printf("updated proxy %d", id)
 
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(map[string]string{"status": "ok"})
+	if err := json.NewEncoder(rw).Encode(map[string]string{"status": "ok"}); err != nil {
+		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) resetProxy(rw http.ResponseWriter, req *http.Request, id int64) {
@@ -487,7 +505,10 @@ func (s *Server) resetProxy(rw http.ResponseWriter, req *http.Request, id int64)
 
 	log.Printf("reset usage for proxy %d", id)
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(map[string]string{"status": "ok"})
+	if err := json.NewEncoder(rw).Encode(map[string]string{"status": "ok"}); err != nil {
+		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) deleteProxy(rw http.ResponseWriter, req *http.Request, id int64) {
@@ -506,7 +527,10 @@ func (s *Server) deleteProxy(rw http.ResponseWriter, req *http.Request, id int64
 
 	log.Printf("deleted proxy %d", id)
 	rw.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(rw).Encode(map[string]string{"status": "deleted"})
+	if err := json.NewEncoder(rw).Encode(map[string]string{"status": "deleted"}); err != nil {
+		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
