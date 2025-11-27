@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -545,13 +546,38 @@ func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
 		entry.ResponseStatus = resp.StatusCode
 		entry.ResponseHeaders = serializeHeaders(resp.Header, false)
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			entry.ErrorMessage = fmt.Sprintf("read upstream response: %v", err)
+		var body []byte
+		var err error
+		contentType := resp.Header.Get("Content-Type")
+		if strings.Contains(contentType, "text/event-stream") {
+			// For streaming responses, don't read the body to avoid hanging
+			body = []byte("streaming response")
 			resp.Body.Close()
-			return err
+		} else if resp.Header.Get("Content-Encoding") == "gzip" {
+			gzipReader, gzipErr := gzip.NewReader(resp.Body)
+			if gzipErr != nil {
+				entry.ErrorMessage = fmt.Sprintf("create gzip reader: %v", gzipErr)
+				resp.Body.Close()
+				return gzipErr
+			}
+			body, err = io.ReadAll(gzipReader)
+			gzipReader.Close()
+			resp.Body.Close()
+			if err != nil {
+				entry.ErrorMessage = fmt.Sprintf("read gzip upstream response: %v", err)
+				return err
+			}
+			// Remove Content-Encoding since we decompressed
+			resp.Header.Del("Content-Encoding")
+		} else {
+			body, err = io.ReadAll(resp.Body)
+			if err != nil {
+				entry.ErrorMessage = fmt.Sprintf("read upstream response: %v", err)
+				resp.Body.Close()
+				return err
+			}
+			resp.Body.Close()
 		}
-		resp.Body.Close()
 		entry.ResponseBody = body
 		entry.ResponseTokens = countTokens(body)
 		entry.TotalTokens = entry.RequestTokens + entry.ResponseTokens
