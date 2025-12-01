@@ -546,14 +546,30 @@ func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
 		entry.ResponseStatus = resp.StatusCode
 		entry.ResponseHeaders = serializeHeaders(resp.Header, false)
 
-		var body []byte
-		var err error
 		contentType := resp.Header.Get("Content-Type")
 		if strings.Contains(contentType, "text/event-stream") {
-			// For streaming responses, don't read the body to avoid hanging
-			body = []byte("streaming response")
-			resp.Body.Close()
-		} else if resp.Header.Get("Content-Encoding") == "gzip" {
+			entry.ResponseBody = []byte("streaming response")
+			entry.ResponseTokens = 0
+			entry.TotalTokens = entry.RequestTokens
+			entry.CostInputUSD, entry.CostInputRUB = s.calculateCost(route.def.TokenPriceInputUSD, entry.RequestTokens)
+			entry.CostOutputUSD, entry.CostOutputRUB = 0, 0
+			entry.CostTotalUSD = entry.CostInputUSD
+			entry.CostTotalRUB = entry.CostInputRUB
+			log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d (streaming)", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
+
+			ctx, cancel := context.WithTimeout(resp.Request.Context(), 5*time.Second)
+			defer cancel()
+			if err := s.store.SaveLog(ctx, entry); err != nil {
+				log.Printf("failed to save log entry: %v", err)
+				return fmt.Errorf("save log: %w", err)
+			}
+			// Do not touch resp.Body or headers so streaming continues to the client.
+			return nil
+		}
+
+		var body []byte
+		var err error
+		if resp.Header.Get("Content-Encoding") == "gzip" {
 			gzipReader, gzipErr := gzip.NewReader(resp.Body)
 			if gzipErr != nil {
 				entry.ErrorMessage = fmt.Sprintf("create gzip reader: %v", gzipErr)
