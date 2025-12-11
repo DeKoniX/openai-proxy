@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/dekonix/openai-proxy/internal/config"
 	"github.com/dekonix/openai-proxy/internal/models"
@@ -147,6 +148,9 @@ func (s *Server) proxyHandler(rw http.ResponseWriter, req *http.Request) {
 
 	proxyReq := req.Clone(ctx)
 	proxyReq.Body = io.NopCloser(bytes.NewReader(body))
+	proxyReq.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(body)), nil
+	}
 	proxyReq.ContentLength = int64(len(body))
 	proxyReq.URL.Path = trimmedPath
 	proxyReq.URL.RawPath = ""
@@ -551,19 +555,13 @@ func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
 			entry.ResponseBody = []byte("streaming response")
 			entry.ResponseTokens = 0
 			entry.TotalTokens = entry.RequestTokens
-			entry.CostInputUSD, entry.CostInputRUB = s.calculateCost(route.def.TokenPriceInputUSD, entry.RequestTokens)
-			entry.CostOutputUSD, entry.CostOutputRUB = 0, 0
-			entry.CostTotalUSD = entry.CostInputUSD
-			entry.CostTotalRUB = entry.CostInputRUB
-			log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d (streaming)", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
-
-			ctx, cancel := context.WithTimeout(resp.Request.Context(), 5*time.Second)
-			defer cancel()
-			if err := s.store.SaveLog(ctx, entry); err != nil {
-				log.Printf("failed to save log entry: %v", err)
-				return fmt.Errorf("save log: %w", err)
+			resp.Body = &streamingLogger{
+				ReadCloser: resp.Body,
+				entry:      entry,
+				server:     s,
+				route:      route,
 			}
-			// Do not touch resp.Body or headers so streaming continues to the client.
+			// Do not touch headers so streaming continues to the client.
 			return nil
 		}
 
@@ -728,6 +726,67 @@ func (s *Server) calculateCost(pricePerMillion float64, tokens int) (float64, fl
 	usd := pricePerMillion * float64(tokens) / 1_000_000.0
 	rub := usd * s.usdToRubRate
 	return usd, rub
+}
+
+type streamingLogger struct {
+	io.ReadCloser
+	entry  *models.APILog
+	server *Server
+	route  *proxyRoute
+
+	tokens  int
+	inToken bool
+	once    sync.Once
+}
+
+func (s *streamingLogger) Read(p []byte) (int, error) {
+	n, err := s.ReadCloser.Read(p)
+	if n > 0 {
+		s.consumeTokens(p[:n])
+	}
+	return n, err
+}
+
+func (s *streamingLogger) Close() error {
+	err := s.ReadCloser.Close()
+	s.once.Do(func() {
+		if s.inToken {
+			s.tokens++
+			s.inToken = false
+		}
+
+		entry := s.entry
+		entry.ResponseTokens = s.tokens
+		entry.TotalTokens = entry.RequestTokens + entry.ResponseTokens
+		entry.CostInputUSD, entry.CostInputRUB = s.server.calculateCost(s.route.def.TokenPriceInputUSD, entry.RequestTokens)
+		entry.CostOutputUSD, entry.CostOutputRUB = s.server.calculateCost(s.route.def.TokenPriceOutputUSD, entry.ResponseTokens)
+		entry.CostTotalUSD = entry.CostInputUSD + entry.CostOutputUSD
+		entry.CostTotalRUB = entry.CostInputRUB + entry.CostOutputRUB
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if saveErr := s.server.store.SaveLog(ctx, entry); saveErr != nil {
+			log.Printf("failed to save log entry after streaming: %v", saveErr)
+		} else {
+			log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d (streaming)", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
+		}
+	})
+	return err
+}
+
+func (s *streamingLogger) consumeTokens(chunk []byte) {
+	for len(chunk) > 0 {
+		r, size := utf8.DecodeRune(chunk)
+		chunk = chunk[size:]
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			if s.inToken {
+				s.tokens++
+				s.inToken = false
+			}
+			continue
+		}
+		s.inToken = true
+	}
 }
 
 func getLogEntry(ctx context.Context) *models.APILog {
