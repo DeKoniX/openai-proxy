@@ -607,12 +607,7 @@ func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
 			entry.CostTotalUSD = entry.CostInputUSD
 			entry.CostTotalRUB = entry.CostInputRUB
 
-			ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
-			if saveErr := s.store.SaveLog(ctx, entry); saveErr != nil {
-				log.Printf("failed to save log entry after upstream error: %v", saveErr)
-				err = fmt.Errorf("%v; additionally failed to save log: %w", err, saveErr)
-			}
-			cancel()
+			s.saveLogAsync(entry)
 		}
 		log.Printf("upstream error for %s %s: %v", req.Method, req.URL.Path, err)
 		http.Error(rw, "upstream error", http.StatusBadGateway)
@@ -751,13 +746,8 @@ func (l *loggingBody) Close() error {
 		entry.CostTotalUSD = entry.CostInputUSD + entry.CostOutputUSD
 		entry.CostTotalRUB = entry.CostInputRUB + entry.CostOutputRUB
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if saveErr := l.server.store.SaveLog(ctx, entry); saveErr != nil {
-			log.Printf("failed to save log entry: %v", saveErr)
-		} else {
-			log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
-		}
+		log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
+		l.server.saveLogAsync(entry)
 	})
 
 	return err
@@ -798,13 +788,8 @@ func (s *streamingLogger) Close() error {
 		entry.CostTotalUSD = entry.CostInputUSD + entry.CostOutputUSD
 		entry.CostTotalRUB = entry.CostInputRUB + entry.CostOutputRUB
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if saveErr := s.server.store.SaveLog(ctx, entry); saveErr != nil {
-			log.Printf("failed to save log entry after streaming: %v", saveErr)
-		} else {
-			log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d (streaming)", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
-		}
+		log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d (streaming)", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
+		s.server.saveLogAsync(entry)
 	})
 	return err
 }
@@ -895,4 +880,14 @@ func accumulateTokens(chunk []byte, tokens *int, inToken *bool) {
 		}
 		*inToken = true
 	}
+}
+
+func (s *Server) saveLogAsync(entry *models.APILog) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.store.SaveLog(ctx, entry); err != nil {
+			log.Printf("failed to save log entry: %v", err)
+		}
+	}()
 }
