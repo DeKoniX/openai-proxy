@@ -548,10 +548,10 @@ func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
 		}
 
 		entry.ResponseStatus = resp.StatusCode
-		entry.ResponseHeaders = serializeHeaders(resp.Header, false)
 
 		contentType := resp.Header.Get("Content-Type")
 		if strings.Contains(contentType, "text/event-stream") {
+			entry.ResponseHeaders = serializeHeaders(resp.Header, false)
 			entry.ResponseBody = []byte("streaming response")
 			entry.ResponseTokens = 0
 			entry.TotalTokens = entry.RequestTokens
@@ -565,56 +565,31 @@ func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
 			return nil
 		}
 
-		var body []byte
-		var err error
-		if resp.Header.Get("Content-Encoding") == "gzip" {
+		var reader io.ReadCloser = resp.Body
+		var upstream io.Closer
+
+		if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
 			gzipReader, gzipErr := gzip.NewReader(resp.Body)
 			if gzipErr != nil {
 				entry.ErrorMessage = fmt.Sprintf("create gzip reader: %v", gzipErr)
 				resp.Body.Close()
 				return gzipErr
 			}
-			body, err = io.ReadAll(gzipReader)
-			gzipReader.Close()
-			resp.Body.Close()
-			if err != nil {
-				entry.ErrorMessage = fmt.Sprintf("read gzip upstream response: %v", err)
-				return err
-			}
-			// Remove Content-Encoding since we decompressed
+			reader = gzipReader
+			upstream = resp.Body
 			resp.Header.Del("Content-Encoding")
-		} else {
-			body, err = io.ReadAll(resp.Body)
-			if err != nil {
-				entry.ErrorMessage = fmt.Sprintf("read upstream response: %v", err)
-				resp.Body.Close()
-				return err
-			}
-			resp.Body.Close()
-		}
-		entry.ResponseBody = body
-		entry.ResponseTokens = countTokens(body)
-		entry.TotalTokens = entry.RequestTokens + entry.ResponseTokens
-		entry.CostInputUSD, entry.CostInputRUB = s.calculateCost(route.def.TokenPriceInputUSD, entry.RequestTokens)
-		entry.CostOutputUSD, entry.CostOutputRUB = s.calculateCost(route.def.TokenPriceOutputUSD, entry.ResponseTokens)
-		entry.CostTotalUSD = entry.CostInputUSD + entry.CostOutputUSD
-		entry.CostTotalRUB = entry.CostInputRUB + entry.CostOutputRUB
-		log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
-
-		// Replace response body so it can be sent to client unchanged.
-		resp.Body = io.NopCloser(bytes.NewBuffer(body))
-		resp.ContentLength = int64(len(body))
-		if len(body) == 0 {
 			resp.Header.Del("Content-Length")
-		} else {
-			resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+			resp.ContentLength = -1
 		}
 
-		ctx, cancel := context.WithTimeout(resp.Request.Context(), 5*time.Second)
-		defer cancel()
-		if err := s.store.SaveLog(ctx, entry); err != nil {
-			log.Printf("failed to save log entry: %v", err)
-			return fmt.Errorf("save log: %w", err)
+		entry.ResponseHeaders = serializeHeaders(resp.Header, false)
+
+		resp.Body = &loggingBody{
+			reader:   reader,
+			upstream: upstream,
+			entry:    entry,
+			server:   s,
+			route:    route,
 		}
 		return nil
 	}
@@ -728,6 +703,66 @@ func (s *Server) calculateCost(pricePerMillion float64, tokens int) (float64, fl
 	return usd, rub
 }
 
+type loggingBody struct {
+	reader   io.ReadCloser
+	upstream io.Closer
+	entry    *models.APILog
+	server   *Server
+	route    *proxyRoute
+
+	buf     bytes.Buffer
+	tokens  int
+	inToken bool
+	once    sync.Once
+}
+
+func (l *loggingBody) Read(p []byte) (int, error) {
+	n, err := l.reader.Read(p)
+	if n > 0 {
+		l.buf.Write(p[:n])
+		accumulateTokens(p[:n], &l.tokens, &l.inToken)
+	}
+	if err != nil && !errors.Is(err, io.EOF) && l.entry.ErrorMessage == "" {
+		l.entry.ErrorMessage = fmt.Sprintf("read upstream response: %v", err)
+	}
+	return n, err
+}
+
+func (l *loggingBody) Close() error {
+	err := l.reader.Close()
+	if l.upstream != nil && l.upstream != l.reader {
+		if closeErr := l.upstream.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}
+
+	l.once.Do(func() {
+		if l.inToken {
+			l.tokens++
+			l.inToken = false
+		}
+
+		entry := l.entry
+		entry.ResponseBody = l.buf.Bytes()
+		entry.ResponseTokens = l.tokens
+		entry.TotalTokens = entry.RequestTokens + entry.ResponseTokens
+		entry.CostInputUSD, entry.CostInputRUB = l.server.calculateCost(l.route.def.TokenPriceInputUSD, entry.RequestTokens)
+		entry.CostOutputUSD, entry.CostOutputRUB = l.server.calculateCost(l.route.def.TokenPriceOutputUSD, entry.ResponseTokens)
+		entry.CostTotalUSD = entry.CostInputUSD + entry.CostOutputUSD
+		entry.CostTotalRUB = entry.CostInputRUB + entry.CostOutputRUB
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if saveErr := l.server.store.SaveLog(ctx, entry); saveErr != nil {
+			log.Printf("failed to save log entry: %v", saveErr)
+		} else {
+			log.Printf("proxy success %s %s status=%d tokens_in=%d tokens_out=%d", entry.Method, entry.Path, entry.ResponseStatus, entry.RequestTokens, entry.ResponseTokens)
+		}
+	})
+
+	return err
+}
+
 type streamingLogger struct {
 	io.ReadCloser
 	entry  *models.APILog
@@ -775,18 +810,7 @@ func (s *streamingLogger) Close() error {
 }
 
 func (s *streamingLogger) consumeTokens(chunk []byte) {
-	for len(chunk) > 0 {
-		r, size := utf8.DecodeRune(chunk)
-		chunk = chunk[size:]
-		if unicode.IsSpace(r) || unicode.IsControl(r) {
-			if s.inToken {
-				s.tokens++
-				s.inToken = false
-			}
-			continue
-		}
-		s.inToken = true
-	}
+	accumulateTokens(chunk, &s.tokens, &s.inToken)
 }
 
 func getLogEntry(ctx context.Context) *models.APILog {
@@ -856,4 +880,19 @@ func countTokens(data []byte) int {
 
 	tokens := strings.FieldsFunc(text, split)
 	return len(tokens)
+}
+
+func accumulateTokens(chunk []byte, tokens *int, inToken *bool) {
+	for len(chunk) > 0 {
+		r, size := utf8.DecodeRune(chunk)
+		chunk = chunk[size:]
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			if *inToken {
+				(*tokens)++
+				*inToken = false
+			}
+			continue
+		}
+		*inToken = true
+	}
 }
