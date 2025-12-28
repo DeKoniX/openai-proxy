@@ -71,7 +71,7 @@
             placeholder="sk-..."
           />
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
           <label for="proxy-price-input" class="form-label">Цена input $ / 1M</label>
           <input
             type="number"
@@ -82,7 +82,18 @@
             placeholder="0.0000"
           />
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+          <label for="proxy-price-cached" class="form-label">Цена cached input $ / 1M</label>
+          <input
+            type="number"
+            id="proxy-price-cached"
+            class="form-control"
+            step="0.000001"
+            min="0"
+            placeholder="0.0000"
+          />
+        </div>
+        <div class="col-md-3">
           <label for="proxy-price-output" class="form-label">Цена output $ / 1M</label>
           <input
             type="number"
@@ -93,7 +104,7 @@
             placeholder="0.0000"
           />
         </div>
-        <div class="col-md-4 d-flex align-items-end">
+        <div class="col-md-3 d-flex align-items-end">
           <button type="submit" class="btn btn-primary w-100">Создать правило</button>
         </div>
       </form>
@@ -121,6 +132,9 @@
             upstream_key: document.getElementById("proxy-key").value,
             token_price_input_usd:
               parseFloat(document.getElementById("proxy-price-input").value) ||
+              0,
+            token_price_cached_input_usd:
+              parseFloat(document.getElementById("proxy-price-cached").value) ||
               0,
             token_price_output_usd:
               parseFloat(document.getElementById("proxy-price-output").value) ||

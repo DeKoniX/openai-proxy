@@ -69,12 +69,13 @@ func New(cfg *config.Config, store Store) (*Server, error) {
 		defer cancel()
 
 		proxy := &models.Proxy{
-			Name:                "Default",
-			PathPrefix:          normalizePathPrefix("/"),
-			UpstreamURL:         cfg.UpstreamURL,
-			UpstreamKey:         cfg.UpstreamKey,
-			TokenPriceInputUSD:  0,
-			TokenPriceOutputUSD: 0,
+			Name:                     "Default",
+			PathPrefix:               normalizePathPrefix("/"),
+			UpstreamURL:              cfg.UpstreamURL,
+			UpstreamKey:              cfg.UpstreamKey,
+			TokenPriceInputUSD:       0,
+			TokenPriceCachedInputUSD: 0,
+			TokenPriceOutputUSD:      0,
 		}
 
 		if err := store.CreateProxy(ctx, proxy); err != nil && !storage.IsUniqueViolation(err) {
@@ -94,6 +95,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/admin/logs", s.handleLogsPage)
 	mux.HandleFunc("/admin/rules", s.handleRulesPage)
+	mux.HandleFunc("/admin/rules/edit", s.handleRuleEditPage)
 	mux.HandleFunc("/admin/logs/", s.handleLogDetails)
 	mux.HandleFunc("/admin/api/logs", s.handleLogsAPI)
 	mux.HandleFunc("/admin/api/stats", s.handleStatsAPI)
@@ -190,6 +192,20 @@ func (s *Server) handleRulesPage(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	http.ServeFile(rw, req, "web/static/rules.html")
+}
+
+func (s *Server) handleRuleEditPage(rw http.ResponseWriter, req *http.Request) {
+	if req.URL.Path != "/admin/rules/edit" {
+		http.NotFound(rw, req)
+		return
+	}
+
+	if req.Method != http.MethodGet {
+		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	http.ServeFile(rw, req, "web/static/rule_edit.html")
 }
 
 func (s *Server) handleLogDetails(rw http.ResponseWriter, req *http.Request) {
@@ -396,12 +412,13 @@ func (s *Server) listProxies(rw http.ResponseWriter, req *http.Request) {
 
 func (s *Server) createProxy(rw http.ResponseWriter, req *http.Request) {
 	type payload struct {
-		Name                string  `json:"name"`
-		PathPrefix          string  `json:"path_prefix"`
-		UpstreamURL         string  `json:"upstream_url"`
-		UpstreamKey         string  `json:"upstream_key"`
-		TokenPriceInputUSD  float64 `json:"token_price_input_usd"`
-		TokenPriceOutputUSD float64 `json:"token_price_output_usd"`
+		Name                     string  `json:"name"`
+		PathPrefix               string  `json:"path_prefix"`
+		UpstreamURL              string  `json:"upstream_url"`
+		UpstreamKey              string  `json:"upstream_key"`
+		TokenPriceInputUSD       float64 `json:"token_price_input_usd"`
+		TokenPriceCachedInputUSD float64 `json:"token_price_cached_input_usd"`
+		TokenPriceOutputUSD      float64 `json:"token_price_output_usd"`
 	}
 
 	var body payload
@@ -428,12 +445,13 @@ func (s *Server) createProxy(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	proxy := &models.Proxy{
-		Name:                strings.TrimSpace(body.Name),
-		PathPrefix:          prefix,
-		UpstreamURL:         target.String(),
-		UpstreamKey:         strings.TrimSpace(body.UpstreamKey),
-		TokenPriceInputUSD:  body.TokenPriceInputUSD,
-		TokenPriceOutputUSD: body.TokenPriceOutputUSD,
+		Name:                     strings.TrimSpace(body.Name),
+		PathPrefix:               prefix,
+		UpstreamURL:              target.String(),
+		UpstreamKey:              strings.TrimSpace(body.UpstreamKey),
+		TokenPriceInputUSD:       body.TokenPriceInputUSD,
+		TokenPriceCachedInputUSD: body.TokenPriceCachedInputUSD,
+		TokenPriceOutputUSD:      body.TokenPriceOutputUSD,
 	}
 
 	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
@@ -468,10 +486,11 @@ func (s *Server) createProxy(rw http.ResponseWriter, req *http.Request) {
 
 func (s *Server) updateProxy(rw http.ResponseWriter, req *http.Request, id int64) {
 	type payload struct {
-		Name                *string  `json:"name"`
-		UpstreamKey         *string  `json:"upstream_key"`
-		TokenPriceInputUSD  *float64 `json:"token_price_input_usd"`
-		TokenPriceOutputUSD *float64 `json:"token_price_output_usd"`
+		Name                     *string  `json:"name"`
+		UpstreamKey              *string  `json:"upstream_key"`
+		TokenPriceInputUSD       *float64 `json:"token_price_input_usd"`
+		TokenPriceCachedInputUSD *float64 `json:"token_price_cached_input_usd"`
+		TokenPriceOutputUSD      *float64 `json:"token_price_output_usd"`
 	}
 
 	var body payload
@@ -481,10 +500,11 @@ func (s *Server) updateProxy(rw http.ResponseWriter, req *http.Request, id int64
 	}
 
 	updates := storage.ProxyUpdate{
-		Name:                body.Name,
-		TokenPriceInputUSD:  body.TokenPriceInputUSD,
-		TokenPriceOutputUSD: body.TokenPriceOutputUSD,
-		UpstreamKey:         body.UpstreamKey,
+		Name:                     body.Name,
+		TokenPriceInputUSD:       body.TokenPriceInputUSD,
+		TokenPriceCachedInputUSD: body.TokenPriceCachedInputUSD,
+		TokenPriceOutputUSD:      body.TokenPriceOutputUSD,
+		UpstreamKey:              body.UpstreamKey,
 	}
 
 	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
@@ -617,8 +637,16 @@ func (s *Server) buildReverseProxy(route *proxyRoute) *httputil.ReverseProxy {
 			entry.ResponseHeaders = ""
 			entry.ResponseTokens = 0
 			entry.TotalTokens = entry.RequestTokens
-			entry.CostInputUSD, entry.CostInputRUB = s.calculateCost(route.def.TokenPriceInputUSD, entry.RequestTokens)
-			entry.CostOutputUSD, entry.CostOutputRUB = 0, 0
+			entry.CachedInputTokens = 0
+
+			usage := tokenUsage{
+				InputTokens:       entry.RequestTokens,
+				CachedInputTokens: entry.CachedInputTokens,
+				OutputTokens:      entry.ResponseTokens,
+			}
+
+			entry.CostInputUSD, entry.CostOutputUSD, entry.CostInputRUB, entry.CostOutputRUB =
+				s.calculateUsageCosts(usage, route.def.TokenPriceInputUSD, route.def.TokenPriceCachedInputUSD, route.def.TokenPriceOutputUSD)
 			entry.CostTotalUSD = entry.CostInputUSD
 			entry.CostTotalRUB = entry.CostInputRUB
 
@@ -704,13 +732,91 @@ func (s *Server) matchRoute(path string) (*proxyRoute, string) {
 	return nil, ""
 }
 
-func (s *Server) calculateCost(pricePerMillion float64, tokens int) (float64, float64) {
+type tokenUsage struct {
+	InputTokens       int
+	CachedInputTokens int
+	OutputTokens      int
+}
+
+func calculateCostUSD(pricePerMillion float64, tokens int) float64 {
 	if pricePerMillion <= 0 || tokens <= 0 {
-		return 0, 0
+		return 0
 	}
-	usd := pricePerMillion * float64(tokens) / 1_000_000.0
-	rub := usd * s.usdToRubRate
-	return usd, rub
+	return pricePerMillion * float64(tokens) / 1_000_000.0
+}
+
+func (s *Server) calculateCost(pricePerMillion float64, tokens int) (float64, float64) {
+	usd := calculateCostUSD(pricePerMillion, tokens)
+	return usd, usd * s.usdToRubRate
+}
+
+func (s *Server) calculateUsageCosts(usage tokenUsage, priceInput, priceCachedInput, priceOutput float64) (float64, float64, float64, float64) {
+	if usage.CachedInputTokens < 0 {
+		usage.CachedInputTokens = 0
+	}
+	if usage.InputTokens > 0 && usage.CachedInputTokens > usage.InputTokens {
+		usage.CachedInputTokens = usage.InputTokens
+	}
+
+	cachedPrice := priceCachedInput
+	if cachedPrice <= 0 {
+		cachedPrice = priceInput
+	}
+
+	inputUSD := calculateCostUSD(priceInput, usage.InputTokens-usage.CachedInputTokens) + calculateCostUSD(cachedPrice, usage.CachedInputTokens)
+	outputUSD := calculateCostUSD(priceOutput, usage.OutputTokens)
+
+	return inputUSD, outputUSD, inputUSD * s.usdToRubRate, outputUSD * s.usdToRubRate
+}
+
+func extractUsageFromBody(body []byte) (tokenUsage, bool) {
+	var payload struct {
+		Usage struct {
+			InputTokens         int `json:"input_tokens"`
+			OutputTokens        int `json:"output_tokens"`
+			PromptTokens        int `json:"prompt_tokens"`
+			CompletionTokens    int `json:"completion_tokens"`
+			CachedTokens        int `json:"cached_tokens"`
+			InputCachedTokens   int `json:"input_cached_tokens"`
+			PromptTokensDetails struct {
+				CachedTokens int `json:"cached_tokens"`
+			} `json:"prompt_tokens_details"`
+		} `json:"usage"`
+	}
+
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return tokenUsage{}, false
+	}
+
+	usage := tokenUsage{
+		InputTokens:  payload.Usage.InputTokens,
+		OutputTokens: payload.Usage.OutputTokens,
+	}
+	if usage.InputTokens == 0 {
+		usage.InputTokens = payload.Usage.PromptTokens
+	}
+	if usage.OutputTokens == 0 {
+		usage.OutputTokens = payload.Usage.CompletionTokens
+	}
+
+	cached := payload.Usage.InputCachedTokens
+	if cached == 0 {
+		cached = payload.Usage.CachedTokens
+	}
+	if cached == 0 {
+		cached = payload.Usage.PromptTokensDetails.CachedTokens
+	}
+
+	usage.CachedInputTokens = cached
+	if usage.InputTokens > 0 && usage.CachedInputTokens > usage.InputTokens {
+		usage.CachedInputTokens = usage.InputTokens
+	}
+
+	if usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.CachedInputTokens == 0 {
+		return tokenUsage{}, false
+	}
+
+	return usage, true
 }
 
 type loggingBody struct {
@@ -754,10 +860,25 @@ func (l *loggingBody) Close() error {
 
 		entry := l.entry
 		entry.ResponseBody = l.buf.Bytes()
-		entry.ResponseTokens = l.tokens
+		if usage, ok := extractUsageFromBody(entry.ResponseBody); ok {
+			entry.RequestTokens = usage.InputTokens
+			entry.CachedInputTokens = usage.CachedInputTokens
+			entry.ResponseTokens = usage.OutputTokens
+		} else {
+			entry.CachedInputTokens = 0
+			entry.ResponseTokens = l.tokens
+		}
+
 		entry.TotalTokens = entry.RequestTokens + entry.ResponseTokens
-		entry.CostInputUSD, entry.CostInputRUB = l.server.calculateCost(l.route.def.TokenPriceInputUSD, entry.RequestTokens)
-		entry.CostOutputUSD, entry.CostOutputRUB = l.server.calculateCost(l.route.def.TokenPriceOutputUSD, entry.ResponseTokens)
+
+		usage := tokenUsage{
+			InputTokens:       entry.RequestTokens,
+			CachedInputTokens: entry.CachedInputTokens,
+			OutputTokens:      entry.ResponseTokens,
+		}
+
+		entry.CostInputUSD, entry.CostOutputUSD, entry.CostInputRUB, entry.CostOutputRUB =
+			l.server.calculateUsageCosts(usage, l.route.def.TokenPriceInputUSD, l.route.def.TokenPriceCachedInputUSD, l.route.def.TokenPriceOutputUSD)
 		entry.CostTotalUSD = entry.CostInputUSD + entry.CostOutputUSD
 		entry.CostTotalRUB = entry.CostInputRUB + entry.CostOutputRUB
 
@@ -798,8 +919,16 @@ func (s *streamingLogger) Close() error {
 		entry := s.entry
 		entry.ResponseTokens = s.tokens
 		entry.TotalTokens = entry.RequestTokens + entry.ResponseTokens
-		entry.CostInputUSD, entry.CostInputRUB = s.server.calculateCost(s.route.def.TokenPriceInputUSD, entry.RequestTokens)
-		entry.CostOutputUSD, entry.CostOutputRUB = s.server.calculateCost(s.route.def.TokenPriceOutputUSD, entry.ResponseTokens)
+		entry.CachedInputTokens = 0
+
+		usage := tokenUsage{
+			InputTokens:       entry.RequestTokens,
+			CachedInputTokens: entry.CachedInputTokens,
+			OutputTokens:      entry.ResponseTokens,
+		}
+
+		entry.CostInputUSD, entry.CostOutputUSD, entry.CostInputRUB, entry.CostOutputRUB =
+			s.server.calculateUsageCosts(usage, s.route.def.TokenPriceInputUSD, s.route.def.TokenPriceCachedInputUSD, s.route.def.TokenPriceOutputUSD)
 		entry.CostTotalUSD = entry.CostInputUSD + entry.CostOutputUSD
 		entry.CostTotalRUB = entry.CostInputRUB + entry.CostOutputRUB
 

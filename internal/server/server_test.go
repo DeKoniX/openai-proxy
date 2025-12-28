@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -203,12 +204,13 @@ func TestCreateProxy(t *testing.T) {
 	srv := newTestServer(t, store)
 
 	payload := map[string]interface{}{
-		"name":                   "OpenAI",
-		"path_prefix":            "/openai",
-		"upstream_url":           "https://api.openai.com/v1",
-		"upstream_key":           "sk-xxx",
-		"token_price_input_usd":  0.5,
-		"token_price_output_usd": 1.1,
+		"name":                         "OpenAI",
+		"path_prefix":                  "/openai",
+		"upstream_url":                 "https://api.openai.com/v1",
+		"upstream_key":                 "sk-xxx",
+		"token_price_input_usd":        0.5,
+		"token_price_cached_input_usd": 0.25,
+		"token_price_output_usd":       1.1,
 	}
 	body, _ := json.Marshal(payload)
 
@@ -227,6 +229,9 @@ func TestCreateProxy(t *testing.T) {
 	created := store.created[0]
 	if created.PathPrefix != "/openai" || created.UpstreamURL != "https://api.openai.com/v1" {
 		t.Fatalf("unexpected created proxy: %+v", created)
+	}
+	if created.TokenPriceCachedInputUSD != 0.25 {
+		t.Fatalf("unexpected cached input price: %+v", created)
 	}
 }
 
@@ -291,10 +296,11 @@ func TestUpdateProxy(t *testing.T) {
 	srv := newTestServer(t, store)
 
 	payload := map[string]interface{}{
-		"name":                   "New Name",
-		"upstream_key":           "new-key",
-		"token_price_input_usd":  0.1,
-		"token_price_output_usd": 0.2,
+		"name":                         "New Name",
+		"upstream_key":                 "new-key",
+		"token_price_input_usd":        0.1,
+		"token_price_cached_input_usd": 0.02,
+		"token_price_output_usd":       0.2,
 	}
 	body, _ := json.Marshal(payload)
 
@@ -319,6 +325,9 @@ func TestUpdateProxy(t *testing.T) {
 	}
 	if upd.TokenPriceInputUSD == nil || *upd.TokenPriceInputUSD != 0.1 {
 		t.Fatalf("unexpected input price update: %+v", upd)
+	}
+	if upd.TokenPriceCachedInputUSD == nil || *upd.TokenPriceCachedInputUSD != 0.02 {
+		t.Fatalf("unexpected cached input price update: %+v", upd)
 	}
 	if upd.TokenPriceOutputUSD == nil || *upd.TokenPriceOutputUSD != 0.2 {
 		t.Fatalf("unexpected output price update: %+v", upd)
@@ -405,5 +414,22 @@ func TestHelpers(t *testing.T) {
 	usd, rub := srv.calculateCost(2.0, 1_000_000)
 	if usd != 2.0 || rub != 200 {
 		t.Fatalf("calculateCost: expected (2,200), got (%v,%v)", usd, rub)
+	}
+
+	usageBody := []byte(`{"usage":{"prompt_tokens":1200000,"completion_tokens":500000,"prompt_tokens_details":{"cached_tokens":200000}}}`)
+	usage, ok := extractUsageFromBody(usageBody)
+	if !ok {
+		t.Fatalf("expected usage to be parsed")
+	}
+	if usage.InputTokens != 1200000 || usage.CachedInputTokens != 200000 || usage.OutputTokens != 500000 {
+		t.Fatalf("unexpected usage parse: %+v", usage)
+	}
+
+	inputUSD, outputUSD, inputRUB, outputRUB := srv.calculateUsageCosts(usage, 2.0, 1.0, 3.0)
+	if math.Abs(inputUSD-2.2) > 1e-9 || math.Abs(outputUSD-1.5) > 1e-9 {
+		t.Fatalf("calculateUsageCosts usd mismatch: in=%v out=%v", inputUSD, outputUSD)
+	}
+	if math.Abs(inputRUB-220) > 1e-6 || math.Abs(outputRUB-150) > 1e-6 {
+		t.Fatalf("calculateUsageCosts rub mismatch: in=%v out=%v", inputRUB, outputRUB)
 	}
 }

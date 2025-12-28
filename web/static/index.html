@@ -49,16 +49,23 @@
     </style>
   </head>
   <body class="container py-4">
-    <header class="d-flex flex-wrap align-items-center justify-content-between mb-4 gap-3">
+    <header
+      class="d-flex flex-wrap align-items-center justify-content-between mb-4 gap-3"
+    >
       <div>
         <h1 class="mb-1">Панель управления прокси</h1>
         <p class="text-muted mb-0">
-          Автообновление логов и графиков включается прямо здесь. Добавление новых правил вынесено в отдельную страницу.
+          Автообновление логов и графиков включается прямо здесь. Добавление
+          новых правил вынесено в отдельную страницу.
         </p>
       </div>
       <div class="d-flex gap-2">
-        <a class="btn btn-outline-primary" href="/admin/rules">Добавить правило</a>
-        <button id="manual-refresh" class="btn btn-secondary">Обновить всё</button>
+        <a class="btn btn-outline-primary" href="/admin/rules"
+          >Добавить правило</a
+        >
+        <button id="manual-refresh" class="btn btn-secondary">
+          Обновить всё
+        </button>
       </div>
     </header>
 
@@ -67,7 +74,8 @@
         <div>
           <h2 class="mb-0">Правила проксирования</h2>
           <p class="text-muted mb-0">
-            Редактируйте цены и ключи, добавление новых правил доступно по кнопке «Добавить правило».
+            Редактируйте цены и ключи, добавление новых правил доступно по
+            кнопке «Добавить правило».
           </p>
         </div>
         <span class="badge text-bg-light">Настройки</span>
@@ -76,7 +84,10 @@
       <div class="alert alert-info" id="usage-summary"></div>
 
       <div class="table-responsive card p-3">
-        <table id="proxies-table" class="table table-striped table-hover align-middle mb-0">
+        <table
+          id="proxies-table"
+          class="table table-striped table-hover align-middle mb-0"
+        >
           <thead class="table-dark">
             <tr>
               <th>Путь</th>
@@ -84,6 +95,7 @@
               <th>Upstream</th>
               <th>API Key</th>
               <th>Цена input $ / 1M</th>
+              <th>Цена cached input $ / 1M</th>
               <th>Цена output $ / 1M</th>
               <th>Input токены</th>
               <th>Output токены</th>
@@ -105,12 +117,21 @@
       <div class="d-flex justify-content-between align-items-center mb-2">
         <div>
           <h2 class="mb-0">Логи запросов</h2>
-          <p class="text-muted mb-0">Автообновление последних запросов работает по выбранному интервалу.</p>
+          <p class="text-muted mb-0">
+            Автообновление последних запросов работает по выбранному интервалу.
+          </p>
         </div>
         <div class="text-end">
           <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="logs-auto" checked />
-            <label class="form-check-label" for="logs-auto">Автообновление</label>
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="logs-auto"
+              checked
+            />
+            <label class="form-check-label" for="logs-auto"
+              >Автообновление</label
+            >
           </div>
           <small id="logs-status" class="text-muted d-block"></small>
         </div>
@@ -145,7 +166,10 @@
       </div>
 
       <div class="table-responsive card p-3">
-        <table id="logs-table" class="table table-striped table-hover align-middle mb-0">
+        <table
+          id="logs-table"
+          class="table table-striped table-hover align-middle mb-0"
+        >
           <thead class="table-dark">
             <tr>
               <th>ID</th>
@@ -174,12 +198,21 @@
       <div class="d-flex justify-content-between align-items-center mb-2">
         <div>
           <h2 class="mb-0">Статистика</h2>
-          <p class="text-muted mb-0">Графики на основе Apache ECharts с поддержкой zoom и подсказок.</p>
+          <p class="text-muted mb-0">
+            Графики на основе Apache ECharts с поддержкой zoom и подсказок.
+          </p>
         </div>
         <div class="text-end">
           <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" id="stats-auto" checked />
-            <label class="form-check-label" for="stats-auto">Автообновление</label>
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="stats-auto"
+              checked
+            />
+            <label class="form-check-label" for="stats-auto"
+              >Автообновление</label
+            >
           </div>
           <small id="stats-status" class="text-muted d-block"></small>
         </div>
@@ -217,7 +250,9 @@
           />
         </div>
         <div class="col-auto d-flex align-items-end">
-          <button id="load-stats" class="btn btn-secondary">Обновить графики</button>
+          <button id="load-stats" class="btn btn-secondary">
+            Обновить графики
+          </button>
         </div>
       </div>
 
@@ -270,11 +305,13 @@
                 <button class="btn btn-sm btn-secondary ms-2 save-key">Сохранить Key</button>
             </td>
             <td>
-                <input type="number" class="form-control form-control-sm price-input-in" step="0.0001" min="0" value="${proxy.token_price_input_usd || 0}" />
+                $${Number(proxy.token_price_input_usd || 0).toFixed(2)}
             </td>
             <td>
-                <input type="number" class="form-control form-control-sm price-input-out" step="0.0001" min="0" value="${proxy.token_price_output_usd || 0}" />
-                <button class="btn btn-sm btn-primary ms-2 save-price">Сохранить</button>
+                $${Number(proxy.token_price_cached_input_usd || 0).toFixed(2)}
+            </td>
+            <td>
+                $${Number(proxy.token_price_output_usd || 0).toFixed(2)}
             </td>
              <td>${formatNumber(proxy.usage_input_tokens)}</td>
              <td>${formatNumber(proxy.usage_output_tokens)}</td>
@@ -283,35 +320,14 @@
              <td>${Number((proxy.usage_input_cost_usd || 0) + (proxy.usage_output_cost_usd || 0)).toFixed(4)}</td>
              <td>${Number(proxy.usage_input_cost_rub || 0).toFixed(2)}</td>
              <td>${Number(proxy.usage_output_cost_rub || 0).toFixed(2)}</td>
-             <td>${Number((proxy.usage_input_cost_rub || 0) + (proxy.usage_output_cost_rub || 0)).toFixed(2)}</td>
-             <td>
+            <td>${Number((proxy.usage_input_cost_rub || 0) + (proxy.usage_output_cost_rub || 0)).toFixed(2)}</td>
+            <td>
+                <a class="btn btn-sm btn-info me-1" href="/admin/rules/edit?id=${proxy.id}">Редактировать</a>
                 <button class="btn btn-sm btn-warning me-1 reset-usage">Сбросить</button>
                 <button class="btn btn-sm btn-danger delete-proxy">Удалить</button>
             </td>
         `;
           tbody.appendChild(tr);
-        });
-
-        document.querySelectorAll(".save-price").forEach((button) => {
-          button.addEventListener("click", async (event) => {
-            const row = event.target.closest("tr");
-            const id = row.dataset.proxyId;
-            const inputIn = row.querySelector(".price-input-in");
-            const inputOut = row.querySelector(".price-input-out");
-            const priceIn = parseFloat(inputIn.value);
-            const priceOut = parseFloat(inputOut.value);
-            if (
-              Number.isNaN(priceIn) ||
-              priceIn < 0 ||
-              Number.isNaN(priceOut) ||
-              priceOut < 0
-            ) {
-              alert("Некорректная цена");
-              return;
-            }
-            await updateProxyPrice(id, priceIn, priceOut);
-            await loadProxies();
-          });
         });
 
         document.querySelectorAll(".save-key").forEach((button) => {
@@ -353,21 +369,6 @@
         summary.innerHTML =
           `<strong>Общая статистика:</strong> Input: ${formatNumber(data.total_input_tokens)} токенов, $${Number(data.total_input_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_input_cost_rub || 0).toFixed(2)}; ` +
           `Output: ${formatNumber(data.total_output_tokens)} токенов, $${Number(data.total_output_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_output_cost_rub || 0).toFixed(2)}`;
-      }
-
-      async function updateProxyPrice(id, priceIn, priceOut) {
-        const response = await fetch(`/admin/api/proxies/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token_price_input_usd: priceIn,
-            token_price_output_usd: priceOut,
-          }),
-        });
-        if (!response.ok) {
-          const message = await response.text();
-          alert(`Не удалось обновить цену: ${message}`);
-        }
       }
 
       async function updateProxyKey(id, key) {
@@ -504,10 +505,27 @@
         const costUSDData = stats.map((point) => point.cost_total_usd);
         const costRUBData = stats.map((point) => point.cost_total_rub);
 
-        renderLineChart("requestsChart", "Количество запросов", labels, requestsData);
+        renderLineChart(
+          "requestsChart",
+          "Количество запросов",
+          labels,
+          requestsData,
+        );
         renderLineChart("tokensChart", "Всего токенов", labels, tokensData);
-        renderLineChart("costUSDChart", "Стоимость USD", labels, costUSDData, "rgb(255, 205, 86)");
-        renderLineChart("costRUBChart", "Стоимость RUB", labels, costRUBData, "rgb(255, 99, 132)");
+        renderLineChart(
+          "costUSDChart",
+          "Стоимость USD",
+          labels,
+          costUSDData,
+          "rgb(255, 205, 86)",
+        );
+        renderLineChart(
+          "costRUBChart",
+          "Стоимость RUB",
+          labels,
+          costRUBData,
+          "rgb(255, 99, 132)",
+        );
       }
 
       function renderLineChart(domId, seriesName, labels, data, color) {
@@ -570,14 +588,19 @@
 
       function startLogsAuto() {
         stopLogsAuto();
-        const intervalSec = parseInt(document.getElementById("logs-interval").value, 10);
+        const intervalSec = parseInt(
+          document.getElementById("logs-interval").value,
+          10,
+        );
         const autoEnabled = document.getElementById("logs-auto").checked;
         if (!autoEnabled || Number.isNaN(intervalSec) || intervalSec < 2) {
-          document.getElementById("logs-status").textContent = "Автообновление выключено";
+          document.getElementById("logs-status").textContent =
+            "Автообновление выключено";
           return;
         }
         logsAutoTimer = setInterval(loadLogs, intervalSec * 1000);
-        document.getElementById("logs-status").textContent = `Автообновление каждые ${intervalSec} сек`;
+        document.getElementById("logs-status").textContent =
+          `Автообновление каждые ${intervalSec} сек`;
       }
 
       function stopLogsAuto() {
@@ -589,14 +612,19 @@
 
       function startStatsAuto() {
         stopStatsAuto();
-        const intervalSec = parseInt(document.getElementById("stats-interval").value, 10);
+        const intervalSec = parseInt(
+          document.getElementById("stats-interval").value,
+          10,
+        );
         const autoEnabled = document.getElementById("stats-auto").checked;
         if (!autoEnabled || Number.isNaN(intervalSec) || intervalSec < 5) {
-          document.getElementById("stats-status").textContent = "Автообновление выключено";
+          document.getElementById("stats-status").textContent =
+            "Автообновление выключено";
           return;
         }
         statsAutoTimer = setInterval(loadStats, intervalSec * 1000);
-        document.getElementById("stats-status").textContent = `Автообновление каждые ${intervalSec} сек`;
+        document.getElementById("stats-status").textContent =
+          `Автообновление каждые ${intervalSec} сек`;
       }
 
       function stopStatsAuto() {
@@ -612,16 +640,26 @@
       document.getElementById("load-stats").addEventListener("click", () => {
         loadStats();
       });
-      document.getElementById("manual-refresh").addEventListener("click", () => {
-        loadProxies();
-        loadLogs();
-        loadStats();
-      });
+      document
+        .getElementById("manual-refresh")
+        .addEventListener("click", () => {
+          loadProxies();
+          loadLogs();
+          loadStats();
+        });
 
-      document.getElementById("logs-auto").addEventListener("change", startLogsAuto);
-      document.getElementById("logs-interval").addEventListener("change", startLogsAuto);
-      document.getElementById("stats-auto").addEventListener("change", startStatsAuto);
-      document.getElementById("stats-interval").addEventListener("change", startStatsAuto);
+      document
+        .getElementById("logs-auto")
+        .addEventListener("change", startLogsAuto);
+      document
+        .getElementById("logs-interval")
+        .addEventListener("change", startLogsAuto);
+      document
+        .getElementById("stats-auto")
+        .addEventListener("change", startStatsAuto);
+      document
+        .getElementById("stats-interval")
+        .addEventListener("change", startStatsAuto);
 
       window.addEventListener("resize", () => {
         Object.values(charts).forEach((chart) => chart.resize());

@@ -46,10 +46,10 @@ func (s *Store) SaveLog(ctx context.Context, entry *models.APILog) error {
         INSERT INTO api_logs (
             proxy_id, method, path, query, request_headers, request_body,
             response_status, response_headers, response_body, error_message,
-            request_tokens, response_tokens, total_tokens,
+            request_tokens, cached_input_tokens, response_tokens, total_tokens,
             cost_input_usd, cost_output_usd, cost_input_rub, cost_output_rub,
             cost_total_usd, cost_total_rub
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
         RETURNING id, created_at`
 
 	err := s.pool.QueryRow(ctx, query,
@@ -64,6 +64,7 @@ func (s *Store) SaveLog(ctx context.Context, entry *models.APILog) error {
 		entry.ResponseBody,
 		entry.ErrorMessage,
 		entry.RequestTokens,
+		entry.CachedInputTokens,
 		entry.ResponseTokens,
 		entry.TotalTokens,
 		entry.CostInputUSD,
@@ -90,7 +91,7 @@ func (s *Store) ListRecent(ctx context.Context, limit int) ([]models.APILog, err
         SELECT l.id, l.created_at, COALESCE(l.proxy_id, 0), COALESCE(p.name, ''),
                COALESCE(p.path_prefix, ''), l.method, l.path, l.query, l.request_headers,
                l.response_status, l.response_headers, l.error_message,
-               l.request_tokens, l.response_tokens, l.total_tokens,
+               l.request_tokens, l.cached_input_tokens, l.response_tokens, l.total_tokens,
                l.cost_input_usd, l.cost_output_usd, l.cost_input_rub, l.cost_output_rub,
                l.cost_total_usd, l.cost_total_rub
         FROM api_logs AS l
@@ -121,6 +122,7 @@ func (s *Store) ListRecent(ctx context.Context, limit int) ([]models.APILog, err
 			&entry.ResponseHeaders,
 			&entry.ErrorMessage,
 			&entry.RequestTokens,
+			&entry.CachedInputTokens,
 			&entry.ResponseTokens,
 			&entry.TotalTokens,
 			&entry.CostInputUSD,
@@ -205,7 +207,7 @@ func (s *Store) GetBody(ctx context.Context, id int64) (*models.APILog, error) {
         SELECT l.id, l.created_at, COALESCE(l.proxy_id, 0), COALESCE(p.name, ''),
                COALESCE(p.path_prefix, ''), l.method, l.path, l.query, l.request_headers, l.request_body,
                l.response_status, l.response_headers, l.response_body, l.error_message,
-               l.request_tokens, l.response_tokens, l.total_tokens,
+               l.request_tokens, l.cached_input_tokens, l.response_tokens, l.total_tokens,
                l.cost_input_usd, l.cost_output_usd, l.cost_input_rub, l.cost_output_rub,
                l.cost_total_usd, l.cost_total_rub
         FROM api_logs AS l
@@ -229,6 +231,7 @@ func (s *Store) GetBody(ctx context.Context, id int64) (*models.APILog, error) {
 		&entry.ResponseBody,
 		&entry.ErrorMessage,
 		&entry.RequestTokens,
+		&entry.CachedInputTokens,
 		&entry.ResponseTokens,
 		&entry.TotalTokens,
 		&entry.CostInputUSD,
@@ -256,6 +259,7 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
         upstream_key TEXT NOT NULL DEFAULT '',
         token_price_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
         token_price_input_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
+        token_price_cached_input_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
         token_price_output_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
         last_reset_at TIMESTAMPTZ NOT NULL DEFAULT to_timestamp(0)
 	    );`,
@@ -273,6 +277,7 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	        response_body BYTEA,
 	        error_message TEXT NOT NULL DEFAULT '',
 	        request_tokens INT NOT NULL DEFAULT 0,
+	        cached_input_tokens INT NOT NULL DEFAULT 0,
 	        response_tokens INT NOT NULL DEFAULT 0,
 	        total_tokens INT NOT NULL DEFAULT 0,
         cost_input_usd DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -286,9 +291,11 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE api_logs ALTER COLUMN proxy_id DROP DEFAULT;`,
 		`ALTER TABLE proxies ADD COLUMN IF NOT EXISTS token_price_usd DOUBLE PRECISION NOT NULL DEFAULT 0;`,
 		`ALTER TABLE proxies ADD COLUMN IF NOT EXISTS token_price_input_usd DOUBLE PRECISION NOT NULL DEFAULT 0;`,
+		`ALTER TABLE proxies ADD COLUMN IF NOT EXISTS token_price_cached_input_usd DOUBLE PRECISION NOT NULL DEFAULT 0;`,
 		`ALTER TABLE proxies ADD COLUMN IF NOT EXISTS token_price_output_usd DOUBLE PRECISION NOT NULL DEFAULT 0;`,
 		`ALTER TABLE proxies ADD COLUMN IF NOT EXISTS last_reset_at TIMESTAMPTZ NOT NULL DEFAULT to_timestamp(0);`,
 		`ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS request_tokens INT NOT NULL DEFAULT 0;`,
+		`ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS cached_input_tokens INT NOT NULL DEFAULT 0;`,
 		`ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS response_tokens INT NOT NULL DEFAULT 0;`,
 		`ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS total_tokens INT NOT NULL DEFAULT 0;`,
 		`ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS cost_input_usd DOUBLE PRECISION NOT NULL DEFAULT 0;`,
@@ -299,6 +306,7 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 		`ALTER TABLE api_logs ADD COLUMN IF NOT EXISTS cost_total_rub DOUBLE PRECISION NOT NULL DEFAULT 0;`,
 		`UPDATE proxies SET
             token_price_input_usd = CASE WHEN token_price_input_usd = 0 THEN token_price_usd ELSE token_price_input_usd END,
+            token_price_cached_input_usd = CASE WHEN token_price_cached_input_usd = 0 THEN token_price_input_usd ELSE token_price_cached_input_usd END,
             token_price_output_usd = CASE WHEN token_price_output_usd = 0 THEN token_price_usd ELSE token_price_output_usd END;`,
 	}
 
@@ -325,7 +333,7 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 func (s *Store) ListProxies(ctx context.Context) ([]models.Proxy, error) {
 	const query = `
         SELECT p.id, p.created_at, p.updated_at, p.name, p.path_prefix, p.upstream_url, p.upstream_key,
-               p.token_price_input_usd, p.token_price_output_usd, p.last_reset_at,
+               p.token_price_input_usd, p.token_price_cached_input_usd, p.token_price_output_usd, p.last_reset_at,
                COALESCE(SUM(l.request_tokens), 0) AS usage_input_tokens,
                COALESCE(SUM(l.response_tokens), 0) AS usage_output_tokens,
                COALESCE(SUM(l.cost_input_usd), 0) AS usage_input_cost_usd,
@@ -356,6 +364,7 @@ func (s *Store) ListProxies(ctx context.Context) ([]models.Proxy, error) {
 			&p.UpstreamURL,
 			&p.UpstreamKey,
 			&p.TokenPriceInputUSD,
+			&p.TokenPriceCachedInputUSD,
 			&p.TokenPriceOutputUSD,
 			&p.LastResetAt,
 			&p.UsageInputTokens,
@@ -378,8 +387,8 @@ func (s *Store) ListProxies(ctx context.Context) ([]models.Proxy, error) {
 // CreateProxy inserts a new proxy route definition.
 func (s *Store) CreateProxy(ctx context.Context, proxy *models.Proxy) error {
 	const query = `
-        INSERT INTO proxies (name, path_prefix, upstream_url, upstream_key, token_price_input_usd, token_price_output_usd, created_at, updated_at, last_reset_at)
-        VALUES ($1, $2, $3, $4, $5, $6, now(), now(), now())
+        INSERT INTO proxies (name, path_prefix, upstream_url, upstream_key, token_price_input_usd, token_price_cached_input_usd, token_price_output_usd, created_at, updated_at, last_reset_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now(), now())
         RETURNING id, created_at, updated_at, last_reset_at`
 
 	if err := s.pool.QueryRow(ctx, query,
@@ -388,6 +397,7 @@ func (s *Store) CreateProxy(ctx context.Context, proxy *models.Proxy) error {
 		proxy.UpstreamURL,
 		proxy.UpstreamKey,
 		proxy.TokenPriceInputUSD,
+		proxy.TokenPriceCachedInputUSD,
 		proxy.TokenPriceOutputUSD,
 	).Scan(&proxy.ID, &proxy.CreatedAt, &proxy.UpdatedAt, &proxy.LastResetAt); err != nil {
 		return fmt.Errorf("insert proxy: %w", err)
@@ -397,8 +407,8 @@ func (s *Store) CreateProxy(ctx context.Context, proxy *models.Proxy) error {
 
 // UpdateProxy updates selected fields for a proxy row.
 func (s *Store) UpdateProxy(ctx context.Context, id int64, upd ProxyUpdate) error {
-	setClauses := make([]string, 0, 4)
-	args := make([]interface{}, 0, 5)
+	setClauses := make([]string, 0, 5)
+	args := make([]interface{}, 0, 6)
 	idx := 1
 
 	if upd.Name != nil {
@@ -409,6 +419,11 @@ func (s *Store) UpdateProxy(ctx context.Context, id int64, upd ProxyUpdate) erro
 	if upd.TokenPriceInputUSD != nil {
 		setClauses = append(setClauses, fmt.Sprintf("token_price_input_usd = $%d", idx))
 		args = append(args, *upd.TokenPriceInputUSD)
+		idx++
+	}
+	if upd.TokenPriceCachedInputUSD != nil {
+		setClauses = append(setClauses, fmt.Sprintf("token_price_cached_input_usd = $%d", idx))
+		args = append(args, *upd.TokenPriceCachedInputUSD)
 		idx++
 	}
 	if upd.TokenPriceOutputUSD != nil {
@@ -456,10 +471,11 @@ func (s *Store) DeleteProxy(ctx context.Context, id int64) error {
 
 // ProxyUpdate describes optional fields for proxy update.
 type ProxyUpdate struct {
-	Name                *string
-	TokenPriceInputUSD  *float64
-	TokenPriceOutputUSD *float64
-	UpstreamKey         *string
+	Name                     *string
+	TokenPriceInputUSD       *float64
+	TokenPriceCachedInputUSD *float64
+	TokenPriceOutputUSD      *float64
+	UpstreamKey              *string
 }
 
 // IsUniqueViolation reports if error is unique constraint violation.
