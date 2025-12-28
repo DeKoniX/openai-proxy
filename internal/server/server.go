@@ -93,6 +93,7 @@ func New(cfg *config.Config, store Store) (*Server, error) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/admin/logs", s.handleLogsPage)
+	mux.HandleFunc("/admin/rules", s.handleRulesPage)
 	mux.HandleFunc("/admin/logs/", s.handleLogDetails)
 	mux.HandleFunc("/admin/api/logs", s.handleLogsAPI)
 	mux.HandleFunc("/admin/api/stats", s.handleStatsAPI)
@@ -175,6 +176,20 @@ func (s *Server) handleLogsPage(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	http.ServeFile(rw, req, "web/static/index.html")
+}
+
+func (s *Server) handleRulesPage(rw http.ResponseWriter, req *http.Request) {
+	if req.URL.Path != "/admin/rules" {
+		http.NotFound(rw, req)
+		return
+	}
+
+	if req.Method != http.MethodGet {
+		http.Error(rw, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	http.ServeFile(rw, req, "web/static/rules.html")
 }
 
 func (s *Server) handleLogDetails(rw http.ResponseWriter, req *http.Request) {
