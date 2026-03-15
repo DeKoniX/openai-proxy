@@ -59,3 +59,10 @@ type StatPoint struct {
 	CostTotalUSD float64   `json:"cost_total_usd"`
 	CostTotalRUB float64   `json:"cost_total_rub"`
 }
+
+// ProxySeries holds aggregated statistics for a single proxy over time.
+type ProxySeries struct {
+	ProxyID   int64       `json:"proxy_id"`
+	ProxyName string      `json:"proxy_name"`
+	Points    []StatPoint `json:"points"`
+}

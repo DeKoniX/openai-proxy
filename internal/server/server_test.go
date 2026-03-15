@@ -27,6 +27,12 @@ type fakeStore struct {
 	resetIDs   []int64
 	deletedIDs []int64
 
+	// Stats fields for testing
+	stats           []models.StatPoint
+	statsErr        error
+	statsByProxy    []models.ProxySeries
+	statsByProxyErr error
+
 	createErr error
 	updateErr error
 	resetErr  error
@@ -128,8 +134,17 @@ func (f *fakeStore) GetBody(ctx context.Context, id int64) (*models.APILog, erro
 }
 
 func (f *fakeStore) GetStats(ctx context.Context, period string, limit int) ([]models.StatPoint, error) {
-	// Return empty stats for tests
-	return []models.StatPoint{}, nil
+	if f.statsErr != nil {
+		return nil, f.statsErr
+	}
+	return f.stats, nil
+}
+
+func (f *fakeStore) GetStatsByProxy(ctx context.Context, period string, limit int, proxyIDs []int64) ([]models.ProxySeries, error) {
+	if f.statsByProxyErr != nil {
+		return nil, f.statsByProxyErr
+	}
+	return f.statsByProxy, nil
 }
 
 func newTestServer(t *testing.T, store *fakeStore) *Server {
@@ -352,24 +367,86 @@ func TestResetProxyUsage(t *testing.T) {
 }
 
 func TestStatsAPI(t *testing.T) {
-	store := &fakeStore{}
-	srv := newTestServer(t, store)
-
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/stats?period=day&limit=10", nil)
-	rr := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+	tests := []struct {
+		name            string
+		query           string
+		setupStats      []models.StatPoint
+		setupProxyStats []models.ProxySeries
+		wantCode        int
+		checkBody       func(t *testing.T, body []byte)
+	}{
+		{
+			name:       "no filter returns array",
+			query:      "period=hour&limit=5",
+			setupStats: []models.StatPoint{{RequestCount: 10}},
+			wantCode:   http.StatusOK,
+			checkBody: func(t *testing.T, body []byte) {
+				var result []models.StatPoint
+				if err := json.Unmarshal(body, &result); err != nil {
+					t.Errorf("expected array, got error: %v", err)
+				}
+				if len(result) != 1 || result[0].RequestCount != 10 {
+					t.Errorf("unexpected result: %v", result)
+				}
+			},
+		},
+		{
+			name:  "with proxy_ids returns series object",
+			query: "period=hour&limit=5&proxy_ids=1,2",
+			setupProxyStats: []models.ProxySeries{
+				{ProxyID: 1, ProxyName: "Proxy1", Points: []models.StatPoint{{RequestCount: 5}}},
+				{ProxyID: 2, ProxyName: "Proxy2", Points: []models.StatPoint{{RequestCount: 3}}},
+			},
+			wantCode: http.StatusOK,
+			checkBody: func(t *testing.T, body []byte) {
+				var result struct {
+					Series []models.ProxySeries `json:"series"`
+				}
+				if err := json.Unmarshal(body, &result); err != nil {
+					t.Errorf("expected series object, got error: %v", err)
+				}
+				if len(result.Series) != 2 {
+					t.Errorf("expected 2 series, got %d", len(result.Series))
+				}
+			},
+		},
+		{
+			name:     "invalid proxy_ids returns 400",
+			query:    "proxy_ids=abc",
+			wantCode: http.StatusBadRequest,
+		},
+		{
+			name:       "empty proxy_ids returns array",
+			query:      "proxy_ids=",
+			setupStats: []models.StatPoint{{RequestCount: 7}},
+			wantCode:   http.StatusOK,
+			checkBody: func(t *testing.T, body []byte) {
+				var result []models.StatPoint
+				if err := json.Unmarshal(body, &result); err != nil {
+					t.Errorf("expected array, got error: %v", err)
+				}
+			},
+		},
 	}
 
-	var stats []models.StatPoint
-	if err := json.Unmarshal(rr.Body.Bytes(), &stats); err != nil {
-		t.Fatalf("decode stats: %v", err)
-	}
-	if len(stats) != 0 {
-		t.Fatalf("expected empty stats, got %d", len(stats))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &fakeStore{
+				stats:        tt.setupStats,
+				statsByProxy: tt.setupProxyStats,
+			}
+			srv := newTestServer(t, store)
+			req := httptest.NewRequest(http.MethodGet, "/admin/api/stats?"+tt.query, nil)
+			rr := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantCode {
+				t.Errorf("status = %d, want %d", rr.Code, tt.wantCode)
+			}
+			if tt.checkBody != nil {
+				tt.checkBody(t, rr.Body.Bytes())
+			}
+		})
 	}
 }
 

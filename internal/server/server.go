@@ -33,6 +33,7 @@ type Store interface {
 	ListRecent(ctx context.Context, limit int) ([]models.APILog, error)
 	GetBody(ctx context.Context, id int64) (*models.APILog, error)
 	GetStats(ctx context.Context, period string, limit int) ([]models.StatPoint, error)
+	GetStatsByProxy(ctx context.Context, period string, limit int, proxyIDs []int64) ([]models.ProxySeries, error)
 	ListProxies(ctx context.Context) ([]models.Proxy, error)
 	CreateProxy(ctx context.Context, proxy *models.Proxy) error
 	UpdateProxy(ctx context.Context, id int64, upd storage.ProxyUpdate) error
@@ -289,23 +290,56 @@ func (s *Server) handleStatsAPI(rw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	log.Printf("stats request: period=%s limit=%d", period, limit)
+	var proxyIDs []int64
+	if raw := req.URL.Query().Get("proxy_ids"); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(part, 10, 64)
+			if err != nil {
+				http.Error(rw, "invalid proxy_ids value", http.StatusBadRequest)
+				return
+			}
+			proxyIDs = append(proxyIDs, id)
+		}
+	}
+
+	log.Printf("stats request: period=%s limit=%d proxy_ids=%v", period, limit, proxyIDs)
 
 	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
 	defer cancel()
 
-	stats, err := s.store.GetStats(ctx, period, limit)
-	if err != nil {
-		log.Printf("failed to load stats: %v", err)
-		http.Error(rw, "failed to load stats", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("loaded %d stat points", len(stats))
-	rw.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(rw).Encode(stats); err != nil {
-		http.Error(rw, "failed to encode response", http.StatusInternalServerError)
-		return
+	if len(proxyIDs) > 0 {
+		series, err := s.store.GetStatsByProxy(ctx, period, limit, proxyIDs)
+		if err != nil {
+			log.Printf("failed to load stats by proxy: %v", err)
+			http.Error(rw, "failed to load stats", http.StatusInternalServerError)
+			return
+		}
+		log.Printf("loaded %d proxy series", len(series))
+		rw.Header().Set("Content-Type", "application/json")
+		type response struct {
+			Series []models.ProxySeries `json:"series"`
+		}
+		if err := json.NewEncoder(rw).Encode(response{Series: series}); err != nil {
+			http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		stats, err := s.store.GetStats(ctx, period, limit)
+		if err != nil {
+			log.Printf("failed to load stats: %v", err)
+			http.Error(rw, "failed to load stats", http.StatusInternalServerError)
+			return
+		}
+		log.Printf("loaded %d stat points", len(stats))
+		rw.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(rw).Encode(stats); err != nil {
+			http.Error(rw, "failed to encode response", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 

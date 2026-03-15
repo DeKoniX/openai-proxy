@@ -218,43 +218,49 @@
         </div>
       </div>
 
-      <div class="row g-3 mb-3">
-        <div class="col-auto">
-          <label for="stats-period" class="form-label">Период</label>
-          <select id="stats-period" class="form-control">
-            <option value="hour">По часам</option>
-            <option value="day">По дням</option>
-            <option value="week">По неделям</option>
-          </select>
-        </div>
-        <div class="col-auto">
-          <label for="stats-limit" class="form-label">Количество точек</label>
-          <input
-            type="number"
-            id="stats-limit"
-            class="form-control"
-            value="24"
-            min="1"
-            max="200"
-          />
-        </div>
-        <div class="col-auto">
-          <label for="stats-interval" class="form-label">Интервал, сек</label>
-          <input
-            type="number"
-            id="stats-interval"
-            class="form-control"
-            value="30"
-            min="5"
-            max="600"
-          />
-        </div>
-        <div class="col-auto d-flex align-items-end">
-          <button id="load-stats" class="btn btn-secondary">
-            Обновить графики
-          </button>
-        </div>
-      </div>
+        <div class="row g-3 mb-3">
+            <div class="col-auto">
+              <label for="stats-period" class="form-label">Период</label>
+              <select id="stats-period" class="form-control">
+                <option value="hour">По часам</option>
+                <option value="day">По дням</option>
+                <option value="week">По неделям</option>
+              </select>
+            </div>
+            <div class="col-auto">
+              <label for="stats-limit" class="form-label">Количество точек</label>
+              <input
+                type="number"
+                id="stats-limit"
+                class="form-control"
+                value="24"
+                min="1"
+                max="200"
+              />
+            </div>
+            <div class="col-auto">
+              <label for="stats-interval" class="form-label">Интервал, сек</label>
+              <input
+                type="number"
+                id="stats-interval"
+                class="form-control"
+                value="30"
+                min="5"
+                max="600"
+              />
+            </div>
+            <div class="col-auto d-flex align-items-end">
+              <button id="load-stats" class="btn btn-secondary">
+                Обновить графики
+              </button>
+            </div>
+          </div>
+
+          <div id="proxy-filter" class="mb-3" style="display:none">
+            <label class="form-label fw-semibold">Прокси для графиков</label>
+            <div id="proxy-checkboxes" class="d-flex flex-wrap gap-2"></div>
+            <div id="proxy-filter-warning" class="text-warning small mt-1" style="display:none">Выберите хотя бы один прокси</div>
+          </div>
 
       <div class="row g-3">
         <div class="col-md-6">
@@ -283,6 +289,7 @@
       const charts = {};
       let logsAutoTimer = null;
       let statsAutoTimer = null;
+      let proxyList = [];
 
       async function loadProxies() {
         const response = await fetch("/admin/api/proxies");
@@ -291,6 +298,8 @@
           return;
         }
         const data = await response.json();
+        proxyList = data.proxies;
+        renderProxyFilter();
         const tbody = document.querySelector("#proxies-table tbody");
         tbody.innerHTML = "";
         data.proxies.forEach((proxy) => {
@@ -369,6 +378,29 @@
         summary.innerHTML =
           `<strong>Общая статистика:</strong> Input: ${formatNumber(data.total_input_tokens)} токенов, $${Number(data.total_input_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_input_cost_rub || 0).toFixed(2)}; ` +
           `Output: ${formatNumber(data.total_output_tokens)} токенов, $${Number(data.total_output_cost_usd || 0).toFixed(4)} / ₽${Number(data.total_output_cost_rub || 0).toFixed(2)}`;
+      }
+
+function getSelectedProxyIDs() {
+  return [...document.querySelectorAll('.proxy-cb:checked')].map(cb => cb.value);
+}
+
+      function renderProxyFilter() {
+        const filterDiv = document.getElementById('proxy-filter');
+        const checkboxesDiv = document.getElementById('proxy-checkboxes');
+        if (proxyList.length <= 1) {
+          filterDiv.style.display = 'none';
+          return;
+        }
+        filterDiv.style.display = '';
+        checkboxesDiv.innerHTML = '';
+        proxyList.forEach(proxy => {
+          const name = proxy.name || proxy.path_prefix || `Proxy ${proxy.id}`;
+          const div = document.createElement('div');
+          div.className = 'form-check form-check-inline';
+          div.innerHTML = `<input class="form-check-input proxy-cb" type="checkbox" id="proxy-cb-${proxy.id}" value="${proxy.id}" checked><label class="form-check-label" for="proxy-cb-${proxy.id}">${name}</label>`;
+          checkboxesDiv.appendChild(div);
+        });
+        checkboxesDiv.addEventListener('change', loadStats);
       }
 
       async function updateProxyKey(id, key) {
@@ -480,19 +512,41 @@
       }
 
       async function loadStats() {
-        const period = document.getElementById("stats-period").value;
-        const limit = document.getElementById("stats-limit").value;
-
-        const response = await fetch(
-          `/admin/api/stats?period=${period}&limit=${limit}`,
-        );
-        if (!response.ok) {
-          console.error("Failed to load stats");
-          return;
+        const period = document.getElementById('stats-period').value;
+        const limit = document.getElementById('stats-limit').value;
+        
+        let url = `/admin/api/stats?period=${encodeURIComponent(period)}&limit=${encodeURIComponent(limit)}`;
+        
+        if (proxyList.length > 1) {
+          const selectedIDs = getSelectedProxyIDs();
+          if (selectedIDs.length === 0) {
+            document.getElementById('proxy-filter-warning').style.display = '';
+            return;
+          }
+          document.getElementById('proxy-filter-warning').style.display = 'none';
+          url += `&proxy_ids=${selectedIDs.join(',')}`;
         }
-        const stats = await response.json();
-        renderCharts(stats.reverse());
-        markUpdated("stats-status");
+        
+        try {
+          const response = await fetch(url);
+          if (!response.ok) {
+            console.error('Failed to load stats:', response.status);
+            return;
+          }
+          
+          const data = await response.json();
+          
+          if (Array.isArray(data)) {
+            // Backward compat: flat array
+            renderCharts(data.reverse());
+          } else if (data && data.series) {
+            // Per-proxy: multi-series
+            renderMultiSeriesCharts(data.series);
+          }
+          markUpdated('stats-status');
+        } catch (err) {
+          console.error('Error loading stats:', err);
+        }
       }
 
       function renderCharts(stats) {
@@ -580,6 +634,95 @@
           ],
         });
       }
+
+function renderMultiSeriesCharts(seriesList) {
+  // Collect all unique timestamps
+  const timestamps = new Set();
+  seriesList.forEach(series => {
+    series.points.forEach(point => {
+      timestamps.add(point.time);
+    });
+  });
+  const sortedTimestamps = [...timestamps].sort();
+  const labels = sortedTimestamps.map(t => new Date(t).toLocaleString());
+  
+  // Build series data
+  const requestsSeries = [];
+  const tokensSeries = [];
+  const usdSeries = [];
+  const rubSeries = [];
+  
+  seriesList.forEach(series => {
+    const name = series.proxy_name || `Proxy ${series.proxy_id}`;
+    const dataMap = new Map(series.points.map(p => [p.time, p]));
+    
+    requestsSeries.push({
+      name,
+      data: sortedTimestamps.map(t => dataMap.get(t)?.request_count || 0)
+    });
+    tokensSeries.push({
+      name,
+      data: sortedTimestamps.map(t => dataMap.get(t)?.total_tokens || 0)
+    });
+    usdSeries.push({
+      name,
+      data: sortedTimestamps.map(t => dataMap.get(t)?.cost_total_usd || 0)
+    });
+    rubSeries.push({
+      name,
+      data: sortedTimestamps.map(t => dataMap.get(t)?.cost_total_rub || 0)
+    });
+  });
+  
+  // Add "Total" series if 2+ proxies
+  if (seriesList.length >= 2) {
+    const sumData = (seriesArr) => sortedTimestamps.map((_, i) => 
+      seriesArr.reduce((sum, s) => sum + s.data[i], 0)
+    );
+    
+    requestsSeries.push({ name: 'Total', data: sumData(requestsSeries), lineStyle: { type: 'dashed', width: 3 } });
+    tokensSeries.push({ name: 'Total', data: sumData(tokensSeries), lineStyle: { type: 'dashed', width: 3 } });
+    usdSeries.push({ name: 'Total', data: sumData(usdSeries), lineStyle: { type: 'dashed', width: 3 } });
+    rubSeries.push({ name: 'Total', data: sumData(rubSeries), lineStyle: { type: 'dashed', width: 3 } });
+  }
+  
+  renderMultiSeriesChart('requestsChart', 'Запросы', labels, requestsSeries);
+  renderMultiSeriesChart('tokensChart', 'Токены', labels, tokensSeries);
+  renderMultiSeriesChart('costUSDChart', 'Стоимость (USD)', labels, usdSeries);
+  renderMultiSeriesChart('costRUBChart', 'Стоимость (RUB)', labels, rubSeries);
+}
+
+function renderMultiSeriesChart(domId, title, labels, seriesData) {
+  const element = document.getElementById(domId);
+  if (!element) return;
+  
+  if (!charts[domId]) {
+    charts[domId] = echarts.init(element);
+  }
+  
+  const series = seriesData.map(s => ({
+    name: s.name,
+    type: 'line',
+    data: s.data,
+    smooth: true,
+    symbol: 'circle',
+    symbolSize: 6,
+    lineStyle: s.lineStyle || {},
+    emphasis: { focus: 'series' }
+  }));
+  
+  const option = {
+    title: { text: title, left: 'center', top: 5, textStyle: { fontSize: 14 } },
+    tooltip: { trigger: 'axis' },
+    legend: { data: seriesData.map(s => s.name), top: 30 },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: 70, containLabel: true },
+    xAxis: { type: 'category', boundaryGap: false, data: labels },
+    yAxis: { type: 'value' },
+    series: series
+  };
+  
+  charts[domId].setOption(option, true); // notMerge=true
+}
 
       function markUpdated(statusId) {
         const el = document.getElementById(statusId);

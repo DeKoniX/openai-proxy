@@ -201,6 +201,90 @@ func (s *Store) GetStats(ctx context.Context, period string, limit int) ([]model
 	return stats, nil
 }
 
+// GetStatsByProxy returns statistics grouped by proxy and time period.
+// proxyIDs must be non-empty; rows with proxy_id = NULL are excluded.
+func (s *Store) GetStatsByProxy(ctx context.Context, period string, limit int, proxyIDs []int64) ([]models.ProxySeries, error) {
+	if limit <= 0 {
+		limit = 24
+	}
+	if len(proxyIDs) == 0 {
+		return []models.ProxySeries{}, nil
+	}
+
+	var groupBy string
+	switch period {
+	case "hour":
+		groupBy = "date_trunc('hour', l.created_at)"
+	case "day":
+		groupBy = "date_trunc('day', l.created_at)"
+	case "week":
+		groupBy = "date_trunc('week', l.created_at)"
+	default:
+		return nil, fmt.Errorf("invalid period: %s", period)
+	}
+
+	intervalStr := fmt.Sprintf("%d %s", limit, period+"s")
+	query := fmt.Sprintf(`
+        SELECT l.proxy_id,
+               COALESCE(p.name, ''),
+               %s AS time_bucket,
+               COUNT(*) AS request_count,
+               SUM(l.total_tokens) AS total_tokens,
+               SUM(l.cost_total_usd) AS cost_total_usd,
+               SUM(l.cost_total_rub) AS cost_total_rub
+        FROM api_logs AS l
+        LEFT JOIN proxies AS p ON p.id = l.proxy_id
+        WHERE l.created_at >= now() - INTERVAL '%s'
+          AND l.proxy_id = ANY($1::bigint[])
+        GROUP BY l.proxy_id, p.name, time_bucket
+        ORDER BY l.proxy_id, time_bucket DESC
+        LIMIT $2`, groupBy, intervalStr)
+
+	rows, err := s.pool.Query(ctx, query, proxyIDs, limit)
+	if err != nil {
+		return nil, fmt.Errorf("select stats by proxy: %w", err)
+	}
+	defer rows.Close()
+
+	// Group rows by proxy_id
+	seriesMap := make(map[int64]*models.ProxySeries)
+	for rows.Next() {
+		var proxyID int64
+		var proxyName string
+		var point models.StatPoint
+		if err := rows.Scan(
+			&proxyID,
+			&proxyName,
+			&point.Time,
+			&point.RequestCount,
+			&point.TotalTokens,
+			&point.CostTotalUSD,
+			&point.CostTotalRUB,
+		); err != nil {
+			return nil, fmt.Errorf("scan stat point: %w", err)
+		}
+		if series, ok := seriesMap[proxyID]; ok {
+			series.Points = append(series.Points, point)
+		} else {
+			seriesMap[proxyID] = &models.ProxySeries{
+				ProxyID:   proxyID,
+				ProxyName: proxyName,
+				Points:    []models.StatPoint{point},
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate stats: %w", err)
+	}
+
+	// Convert map to slice
+	result := make([]models.ProxySeries, 0, len(seriesMap))
+	for _, series := range seriesMap {
+		result = append(result, *series)
+	}
+	return result, nil
+}
+
 // GetBody fetches request and response bodies for a log entry.
 func (s *Store) GetBody(ctx context.Context, id int64) (*models.APILog, error) {
 	const query = `
@@ -325,6 +409,10 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 
 	if _, err := pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_api_logs_created_at ON api_logs(created_at DESC);`); err != nil {
 		return fmt.Errorf("migrate api_logs: %w", err)
+	}
+
+	if _, err := pool.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_api_logs_proxy_created ON api_logs(proxy_id, created_at DESC);`); err != nil {
+		return fmt.Errorf("migrate api_logs proxy index: %w", err)
 	}
 	return nil
 }
